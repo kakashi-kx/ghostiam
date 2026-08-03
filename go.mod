@@ -1,11 +1,13 @@
 module github.com/kakashi-kx/ghostiam
 
-go 1.21
+go 1.25
 
 require (
+	github.com/aws/aws-lambda-go v1.54.0
 	github.com/aws/aws-sdk-go-v2 v1.36.1
 	github.com/aws/aws-sdk-go-v2/config v1.29.5
 	github.com/aws/aws-sdk-go-v2/service/iam v1.39.1
+	github.com/slack-go/slack v0.27.0
 )
 
 require (
@@ -20,4 +22,5 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.13 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.13 // indirect
 	github.com/aws/smithy-go v1.22.2 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 )
