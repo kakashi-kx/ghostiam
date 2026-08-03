@@ -1,8 +1,5 @@
 # Build artifacts
 /build/
-ghostiam
-ghostiam.exe
-ghostiam-detector
 
 # Local ghost store (created by --local mode)
 ghosts.json
