@@ -225,35 +225,34 @@ func runSimulate(cmd *cobra.Command, _ []string) error {
 	local, _ := cmd.Flags().GetBool("local")
 
 	if local {
-		return simulateLocal(username)
+		// PURE LOCAL PATH
+		s := store.NewLocalStore(localStoreFile)
+		ghost, err := s.FindGhost(username)
+		if err != nil {
+			return fmt.Errorf("ghost user '%s' not found in ghosts.json\n  Deploy first: ghostiam deploy --local --count 5", username)
+		}
+
+		fmt.Printf("\n👻 Ghost user activated: %s\n", ghost.Username)
+		fmt.Printf("   Policy: %s\n", ghost.PolicyName)
+		fmt.Printf("   Created: %s\n", ghost.CreatedAt)
+
+		webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
+		if webhookURL == "" {
+			fmt.Printf("   ⚠️  SLACK_WEBHOOK_URL not set. Alert not sent.\n")
+			fmt.Printf("   Set it: export SLACK_WEBHOOK_URL=\"https://hooks.slack.com/services/...\"\n")
+			return nil
+		}
+
+		if err := sendLocalAlert(ghost.Username, ghost.PolicyName, webhookURL); err != nil {
+			fmt.Printf("   ❌ Slack alert failed: %v\n", err)
+			return nil
+		}
+
+		fmt.Printf("   ✅ Alert sent to Slack — check your channel\n")
+		return nil
 	}
-	return simulateAWS(username, region)
-}
 
-// simulateLocal looks up a ghost in ghosts.json and posts a mock alert. Never
-// touches AWS.
-func simulateLocal(username string) error {
-	s := store.NewLocalStore(localStoreFile)
-
-	record, err := s.FindGhost(username)
-	if err != nil {
-		return fmt.Errorf("ghost user %q not found in local store", username)
-	}
-
-	fmt.Printf("Found ghost user in local store:\n")
-	fmt.Printf("  Username:  %s\n", record.Username)
-	fmt.Printf("  Policy:    %s\n", record.PolicyName)
-	fmt.Printf("  CreatedAt: %s\n", record.CreatedAt.Format(time.RFC3339))
-	fmt.Println()
-
-	sendLocalAlert(record.Username, record.PolicyName)
-	return nil
-}
-
-// simulateAWS makes a harmless sts:GetCallerIdentity call against AWS. Alerts
-// are handled by the EventBridge + Lambda pipeline. Never touches the local
-// store.
-func simulateAWS(username, region string) error {
+	// PURE AWS PATH
 	awsCfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
 	if err != nil {
 		return fmt.Errorf("load aws config: %w", err)
@@ -272,57 +271,31 @@ func simulateAWS(username, region string) error {
 	return nil
 }
 
-// sendLocalAlert posts a mock CloudTrail-style alert to Slack, mirroring the
-// Lambda's Block Kit format. It never returns an error for a missing webhook:
-// it prints a warning and continues, so local demos work without Slack.
-func sendLocalAlert(username string, policyName string) {
-	webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
-	if webhookURL == "" {
-		fmt.Println("⚠️  SLACK_WEBHOOK_URL not set. Alert not sent.")
-		fmt.Println("   Set it: export SLACK_WEBHOOK_URL=\"https://hooks.slack.com/services/...\"")
-		return
-	}
+func sendLocalAlert(username, policyName, webhookURL string) error {
+	headerText := slack.NewTextBlockObject("plain_text", "👻 GHOST USER ACTIVATED (LOCAL MODE)", false, false)
+	headerBlock := slack.NewHeaderBlock(headerText)
 
-	body := fmt.Sprintf(
-		"*Ghost User:* `%s`\n*Policy:* `%s`\n*Source:* `local simulation`\n*Timestamp:* `%s`",
-		username,
-		policyName,
-		time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+	bodyText := fmt.Sprintf(
+		"*Ghost User:* `%s`\n*Policy:* %s\n*Source:* local simulation\n*Time:* %s",
+		username, policyName, time.Now().UTC().Format(time.RFC3339),
+	)
+	bodyBlock := slack.NewSectionBlock(
+		slack.NewTextBlockObject("mrkdwn", bodyText, false, false),
+		nil, nil,
 	)
 
-	msg := slack.WebhookMessage{
+	dividerBlock := slack.NewDividerBlock()
+
+	footerText := slack.NewTextBlockObject("mrkdwn", "GhostIam — deploy decoys, detect recon. github.com/kakashi-kx/ghostiam", false, false)
+	footerBlock := slack.NewContextBlock("", footerText)
+
+	msg := &slack.WebhookMessage{
 		Blocks: &slack.Blocks{
-			BlockSet: []slack.Block{
-				slack.NewHeaderBlock(slack.NewTextBlockObject(
-					slack.MarkdownType,
-					":ghost: GHOST USER ACTIVATED (LOCAL MODE)",
-					false,
-					false,
-				)),
-				slack.NewSectionBlock(
-					slack.NewTextBlockObject(slack.MarkdownType, body, false, false),
-					nil,
-					nil,
-				),
-				slack.NewDividerBlock(),
-				slack.NewContextBlock(
-					"",
-					slack.NewTextBlockObject(
-						slack.MarkdownType,
-						"GhostIam — deploy decoys, detect recon. github.com/kakashi-kx/ghostiam",
-						false,
-						false,
-					),
-				),
-			},
+			BlockSet: []slack.Block{headerBlock, bodyBlock, dividerBlock, footerBlock},
 		},
 	}
 
-	if err := slack.PostWebhook(webhookURL, &msg); err != nil {
-		fmt.Printf("⚠️  Failed to send Slack alert: %v\n", err)
-		return
-	}
-	fmt.Println("✅ Alert sent to Slack — check your #general channel")
+	return slack.PostWebhook(webhookURL, msg)
 }
 
 // ---------------------------------------------------------------------------
