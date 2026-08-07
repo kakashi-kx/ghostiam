@@ -104,6 +104,30 @@ func (s *DashboardServer) handleCreateAlert(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusCreated, map[string]any{"status": "ok", "alert_id": id})
 }
 
+// demo actions, severities, source IPs, and user agents used by the Simulate
+// buttons so demo alerts are varied and realistic.
+var (
+	simActions = []string{
+		"iam:PassRole", "iam:CreateAccessKey", "iam:AttachUserPolicy",
+		"s3:ListBuckets", "s3:GetObject", "ec2:DescribeInstances",
+		"sts:AssumeRole", "kms:Decrypt", "secretsmanager:GetSecretValue",
+		"lambda:InvokeFunction", "ssm:GetParameter", "iam:AddUserToGroup",
+	}
+	simSeverities = []string{"info", "low", "medium", "high", "critical"}
+	simSourceIPs  = []string{
+		"185.220.101.23", "91.219.236.132", "103.75.190.42",
+		"45.155.205.233", "185.65.135.202", "162.247.72.199", "192.42.116.16",
+	}
+	simUserAgents = []string{
+		"aws-cli/2.15.0 Python/3.11", "boto3/1.34.0 Botocore/1.34.0",
+		"curl/8.4.0", "aws-sdk-go-v2/1.24.0", "python-requests/2.31.0",
+	}
+)
+
+func randomChoice(items []string) string {
+	return items[rand.Intn(len(items))]
+}
+
 // handleAPISimulateAlert creates a demo alert for a random active ghost (or the
 // username in the form body) and broadcasts it — used by the HTMX Simulate
 // button so the live feed can be demonstrated without the CLI.
@@ -129,18 +153,18 @@ func (s *DashboardServer) handleAPISimulateAlert(w http.ResponseWriter, r *http.
 		username = "ghost-demo-db-read-a7f3c2"
 	}
 	if action == "" {
-		action = "iam:PassRole"
+		action = randomChoice(simActions)
 	}
 
 	a := Alert{
 		GhostUsername: username,
 		Platform:      "local",
-		SourceIP:      "185.220.101.23",
-		UserAgent:     "aws-cli/2.15.0 Python/3.11",
+		SourceIP:      randomChoice(simSourceIPs),
+		UserAgent:     randomChoice(simUserAgents),
 		Action:        action,
 		Region:        "us-east-1",
-		Severity:      "critical",
-		RiskScore:     9,
+		Severity:      randomChoice(simSeverities),
+		RiskScore:     1 + rand.Intn(10),
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -152,7 +176,12 @@ func (s *DashboardServer) handleAPISimulateAlert(w http.ResponseWriter, r *http.
 	a.ID = id
 	_ = s.db.MarkGhostTriggered(username)
 	s.broadcastAlert(a)
-	writeJSON(w, http.StatusCreated, map[string]any{"status": "ok", "alert_id": id, "ghost_username": username})
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"status":        "ok",
+		"alert_id":      id,
+		"ghost_username": username,
+		"alert":         a,
+	})
 }
 
 // handleAPIEvents ingests alerts, journeys, and seeds pushed by the CLI,

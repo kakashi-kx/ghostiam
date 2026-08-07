@@ -27,10 +27,10 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="card p-5">
           <h3 class="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Alert Severity</h3>
-          <div class="h-52 flex items-center justify-center"><canvas id="riskChart"></canvas></div>
+          <div class="h-52 flex items-center justify-center"><canvas id="severityChart"></canvas></div>
         </div>
         <div class="card p-5">
           <h3 class="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Top Actions</h3>
@@ -67,51 +67,88 @@
 
 <script>
 (function () {
-  const byHour = {{if .Charts}}{{.Charts.ByHourJSON}}{{else}}{"labels":[],"values":[]}{{end}};
-  const risk   = {{if .Charts}}{{.Charts.RiskJSON}}{{else}}{"labels":[],"values":[]}{{end}};
-  const acts   = {{if .Charts}}{{.Charts.ActionsJSON}}{{else}}{"labels":[],"values":[]}{{end}};
-
   Chart.defaults.color = '#64748b';
   Chart.defaults.borderColor = 'rgba(148,163,184,0.08)';
   Chart.defaults.font.family = 'ui-monospace, Menlo, monospace';
 
   const grid = { color: 'rgba(148,163,184,0.06)' };
+  const severityColors = { critical: '#f43f5e', high: '#f97316', medium: '#f59e0b', low: '#38bdf8', info: '#38bdf8' };
+  const severityOrder = ['critical', 'high', 'medium', 'low', 'info'];
 
-  new Chart(document.getElementById('byHourChart'), {
+  let byHourChart, severityChart, actionsChart;
+
+  function renderCharts(data) {
+    const byHour = data.alerts_by_hour || [];
+    const risk = data.risk_distribution || {};
+    const acts = data.top_actions || [];
+
+    const byHourLabels = byHour.map(h => h.hour + 'h');
+    const byHourValues = byHour.map(h => h.count);
+
+    const sevLabels = [];
+    const sevValues = [];
+    const sevColors = [];
+    for (const s of severityOrder) {
+      if ((risk[s] || 0) > 0) {
+        sevLabels.push(s);
+        sevValues.push(risk[s]);
+        sevColors.push(severityColors[s]);
+      }
+    }
+
+    const actLabels = acts.map(a => a.action);
+    const actValues = acts.map(a => a.count);
+
+    if (byHourChart) {
+      byHourChart.data.labels = byHourLabels;
+      byHourChart.data.datasets[0].data = byHourValues;
+      byHourChart.update();
+    }
+    if (severityChart) {
+      severityChart.data.labels = sevLabels;
+      severityChart.data.datasets[0].data = sevValues;
+      severityChart.data.datasets[0].backgroundColor = sevColors;
+      severityChart.update();
+    }
+    if (actionsChart) {
+      actionsChart.data.labels = actLabels;
+      actionsChart.data.datasets[0].data = actValues;
+      actionsChart.update();
+    }
+  }
+
+  async function loadCharts() {
+    try {
+      const res = await fetch('/api/v1/stats');
+      if (!res.ok) return;
+      renderCharts(await res.json());
+    } catch (_) { /* stats are best-effort */ }
+  }
+
+  byHourChart = new Chart(document.getElementById('byHourChart'), {
     type: 'line',
-    data: {
-      labels: byHour.labels,
-      datasets: [{
-        label: 'alerts', data: byHour.values,
-        borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.12)',
-        fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2
-      }]
-    },
+    data: { labels: [], datasets: [{
+      label: 'alerts', data: [],
+      borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.12)',
+      fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2
+    }] },
     options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid }, y: { grid, beginAtZero: true } }, plugins: { legend: { display: false } } }
   });
 
-  new Chart(document.getElementById('riskChart'), {
+  severityChart = new Chart(document.getElementById('severityChart'), {
     type: 'doughnut',
-    data: {
-      labels: risk.labels, datasets: [{
-        data: risk.values,
-        backgroundColor: ['#f43f5e', '#f97316', '#f59e0b', '#38bdf8'],
-        borderColor: '#0f172a', borderWidth: 3
-      }]
-    },
+    data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderColor: '#0f172a', borderWidth: 3 }] },
     options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } } }
   });
 
-  new Chart(document.getElementById('actionsChart'), {
+  actionsChart = new Chart(document.getElementById('actionsChart'), {
     type: 'bar',
-    data: {
-      labels: acts.labels, datasets: [{
-        data: acts.values,
-        backgroundColor: 'rgba(52,211,153,0.7)', borderRadius: 4
-      }]
-    },
+    data: { labels: [], datasets: [{ data: [], backgroundColor: 'rgba(52,211,153,0.7)', borderRadius: 4 }] },
     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { grid, beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } } }
   });
+
+  loadCharts();
+  setInterval(loadCharts, 30000);
 })();
 </script>
 {{end}}

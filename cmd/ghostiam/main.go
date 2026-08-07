@@ -386,21 +386,15 @@ func runSimulate(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 
-		if webhookURL == "" {
-			fmt.Printf("   ⚠️  SLACK_WEBHOOK_URL not set. Alert not sent.\n")
-			fmt.Printf("   Set it: export SLACK_WEBHOOK_URL=\"https://hooks.slack.com/services/...\"\n")
-			pushAlertToDashboard(ghost.Username, ghost.PolicyName)
-			return nil
+		if webhookURL != "" {
+			if err := sendLocalAlert(ghost.Username, ghost.PolicyName, webhookURL); err != nil {
+				fmt.Printf("   ❌ Slack alert failed: %v\n", err)
+			} else {
+				fmt.Printf("   ✅ Alert sent to Slack — check your channel\n")
+			}
 		}
 
-		if err := sendLocalAlert(ghost.Username, ghost.PolicyName, webhookURL); err != nil {
-			fmt.Printf("   ❌ Slack alert failed: %v\n", err)
-			return nil
-		}
-
-		fmt.Printf("   ✅ Alert sent to Slack — check your channel\n")
-
-		pushAlertToDashboard(ghost.Username, ghost.PolicyName)
+		pushAlertToDashboard(ghost.Username, ghost.PolicyName, "")
 		return nil
 	}
 
@@ -676,9 +670,7 @@ func runReplay(cmd *cobra.Command, _ []string) error {
 
 	printJourney(graph)
 
-	ing := journeyIngestFromGraph(graph)
-	al := alertFromJourney(graph.GhostUsername, graph)
-	postDashboardEvent(dashboard.EventIngest{Type: "journey", Journey: &ing, Alert: &al})
+	pushJourneyToDashboard(graph.GhostUsername, graph)
 
 	webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
 	if webhookURL == "" {
@@ -711,9 +703,7 @@ func runJourneyForGhost(username, savePath, webhookURL string) error {
 	}
 	fmt.Printf("   💾 Journey saved: %s\n", savePath)
 
-	ing := journeyIngestFromGraph(graph)
-	al := alertFromJourney(username, graph)
-	postDashboardEvent(dashboard.EventIngest{Type: "journey", Journey: &ing, Alert: &al})
+	pushJourneyToDashboard(username, graph)
 
 	if webhookURL == "" {
 		fmt.Println("   ⚠️  SLACK_WEBHOOK_URL not set. Journey alert not sent.")

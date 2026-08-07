@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -14,6 +15,25 @@ import (
 	"github.com/kakashi-kx/ghostiam/pkg/journey"
 	"github.com/spf13/cobra"
 )
+
+// simulated actions, severities, and source IPs used to keep terminal-driven
+// alerts realistic instead of always reporting the same critical 127.0.0.1 hit.
+var (
+	simActions = []string{
+		"iam:PassRole", "iam:CreateAccessKey", "s3:ListBuckets", "ec2:DescribeInstances",
+		"sts:AssumeRole", "kms:Decrypt", "secretsmanager:GetSecretValue",
+		"lambda:InvokeFunction", "iam:AttachUserPolicy", "ssm:GetParameter",
+	}
+	simSeverities = []string{"info", "low", "medium", "high", "critical"}
+	simSourceIPs  = []string{
+		"185.220.101.23", "91.219.236.132", "103.75.190.42",
+		"45.155.205.233", "185.65.135.202",
+	}
+)
+
+func randomString(items []string) string {
+	return items[rand.Intn(len(items))]
+}
 
 // dashboardCmd serves the GhostIam web dashboard.
 var dashboardCmd = &cobra.Command{
@@ -75,21 +95,26 @@ func runDashboard(cmd *cobra.Command, _ []string) error {
 
 // pushAlertToDashboard posts an alert to the dashboard's internal API, if
 // configured. Best-effort: a missing or unreachable dashboard is not an error.
-func pushAlertToDashboard(username, policyName string) {
+// The action may be empty to pick a random simulated action.
+func pushAlertToDashboard(username, policyName, action string) {
 	dashboardURL := os.Getenv("GHOSTIAM_DASHBOARD_URL")
 	if dashboardURL == "" {
 		return
 	}
 	dashboardKey := os.Getenv("GHOSTIAM_DASHBOARD_KEY")
 
+	if action == "" {
+		action = randomString(simActions)
+	}
+
 	payload := map[string]any{
 		"ghost_username": username,
 		"platform":       "local",
-		"action":         "simulated",
-		"source_ip":      "127.0.0.1",
-		"severity":       "critical",
-		"risk_score":     8,
-		"raw_event":      fmt.Sprintf(`{"username":%q,"policy":%q,"source":"local"}`, username, policyName),
+		"action":         action,
+		"source_ip":      randomString(simSourceIPs),
+		"severity":       randomString(simSeverities),
+		"risk_score":     1 + rand.Intn(10),
+		"raw_event":      fmt.Sprintf(`{"username":%q,"policy":%q,"action":%q,"source":"local"}`, username, policyName, action),
 	}
 
 	body, _ := json.Marshal(payload)
@@ -151,6 +176,14 @@ func postDashboardEvent(ev dashboard.EventIngest) {
 	if resp.StatusCode >= 400 {
 		fmt.Printf("   ⚠️  dashboard event rejected: %s\n", resp.Status)
 	}
+}
+
+// pushJourneyToDashboard posts a journey and its derived alert to the
+// dashboard API, if configured. Best-effort.
+func pushJourneyToDashboard(username string, g *journey.AttackGraph) {
+	ing := journeyIngestFromGraph(g)
+	al := alertFromJourney(username, g)
+	postDashboardEvent(dashboard.EventIngest{Type: "journey", Journey: &ing, Alert: &al})
 }
 
 // alertFromJourney builds the dashboard alert payload for a simulated journey.
