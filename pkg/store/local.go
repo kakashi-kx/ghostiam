@@ -83,6 +83,29 @@ func (s *LocalStore) FindGhost(username string) (*GhostRecord, error) {
 	return nil, fmt.Errorf("store: ghost user %q not found", username)
 }
 
+// DeleteGhost removes the record for the given username from the store file.
+// A missing file or unknown username is not an error.
+func (s *LocalStore) DeleteGhost(username string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	records, err := s.readAllLocked()
+	if err != nil {
+		return err
+	}
+
+	kept := records[:0]
+	for _, rec := range records {
+		if rec.Username != username {
+			kept = append(kept, rec)
+		}
+	}
+	if len(kept) == len(records) {
+		return nil // nothing to remove
+	}
+	return s.writeAllLocked(kept)
+}
+
 // readAllLocked reads the JSON array from disk. A missing file yields an empty
 // slice; a corrupt file returns an error.
 func (s *LocalStore) readAllLocked() ([]GhostRecord, error) {

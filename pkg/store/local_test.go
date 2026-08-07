@@ -52,3 +52,40 @@ func TestLocalStoreMissingFile(t *testing.T) {
 		t.Fatalf("expected empty list, got %d", len(list))
 	}
 }
+
+func TestLocalStoreDeleteGhost(t *testing.T) {
+	s := NewLocalStore(filepath.Join(t.TempDir(), "ghosts.json"))
+
+	recs := []GhostRecord{
+		{Username: "ghost-a", PolicyName: "ProdDatabaseReadAccess"},
+		{Username: "ghost-b", PolicyName: "S3BackupOperator"},
+	}
+	for _, r := range recs {
+		if err := s.AddGhost(r); err != nil {
+			t.Fatalf("AddGhost: %v", err)
+		}
+	}
+
+	if err := s.DeleteGhost("ghost-a"); err != nil {
+		t.Fatalf("DeleteGhost: %v", err)
+	}
+
+	list, err := s.ListGhosts()
+	if err != nil {
+		t.Fatalf("ListGhosts: %v", err)
+	}
+	if len(list) != 1 || list[0].Username != "ghost-b" {
+		t.Fatalf("expected only ghost-b, got %+v", list)
+	}
+
+	// Deleting an unknown ghost is a no-op, not an error.
+	if err := s.DeleteGhost("ghost-a"); err != nil {
+		t.Fatalf("DeleteGhost (already gone): %v", err)
+	}
+
+	// Deleting on a missing file is a no-op too.
+	empty := NewLocalStore(filepath.Join(t.TempDir(), "nope.json"))
+	if err := empty.DeleteGhost("ghost-z"); err != nil {
+		t.Fatalf("DeleteGhost on missing file: %v", err)
+	}
+}

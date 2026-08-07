@@ -147,7 +147,7 @@ func (s *DashboardServer) buildRouter() {
 	r.HandleFunc("/", auth(s.handleIndex)).Methods("GET")
 	r.HandleFunc("/ghosts", auth(s.handleGhosts)).Methods("GET")
 	r.HandleFunc("/ghosts/deploy", auth(s.handleGhostDeploy)).Methods("POST")
-	r.HandleFunc("/ghosts/{username}/archive", auth(s.handleGhostArchive)).Methods("POST")
+	r.HandleFunc("/ghosts/{username}/delete", auth(s.handleGhostDelete)).Methods("POST")
 
 	r.HandleFunc("/alerts", auth(s.handleAlerts)).Methods("GET")
 	r.HandleFunc("/alerts/stream", s.handleAlertStream).Methods("GET")

@@ -136,12 +136,20 @@ func joinNotes(notes []string) string {
 
 func syncGhosts(s *DashboardServer) (int, error) {
 	if _, err := os.Stat("ghosts.json"); err != nil {
+		// ghosts.json is gone (e.g. `ghostiam clean --local`): drop every
+		// local ghost so the dashboard reflects the CLI state.
+		if _, derr := s.db.Exec(`DELETE FROM ghosts WHERE platform = 'local'`); derr != nil {
+			return 0, derr
+		}
 		return 0, nil
 	}
 	records, err := store.NewLocalStore("ghosts.json").ListGhosts()
 	if err != nil {
 		return 0, err
 	}
+
+	// Import every record that still exists on disk.
+	seen := map[string]bool{}
 	n := 0
 	for _, r := range records {
 		if err := s.db.UpsertGhost(Ghost{
@@ -154,9 +162,33 @@ func syncGhosts(s *DashboardServer) (int, error) {
 		}); err != nil {
 			return n, err
 		}
+		seen[r.Username] = true
 		n++
 	}
-	return n, nil
+
+	// Remove local ghosts that were deleted from ghosts.json so the dashboard
+	// and CLI never drift apart.
+	rows, err := s.db.Query(`SELECT username FROM ghosts WHERE platform = 'local'`)
+	if err != nil {
+		return n, err
+	}
+	defer rows.Close()
+	var stale []string
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return n, err
+		}
+		if !seen[u] {
+			stale = append(stale, u)
+		}
+	}
+	for _, u := range stale {
+		if err := s.db.DeleteGhost(u); err != nil {
+			return n, err
+		}
+	}
+	return n, rows.Err()
 }
 
 func syncMesh(s *DashboardServer) (int, error) {

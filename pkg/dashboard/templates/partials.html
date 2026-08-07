@@ -186,8 +186,8 @@
         <td class="px-5 py-3 text-xs text-slate-400">{{relTime .CreatedAt}}</td>
         <td class="px-5 py-3 text-right">
           {{if ne .Status "archived"}}
-          <form method="post" action="/ghosts/{{.Username}}/archive" class="inline">
-            <button class="text-slate-500 hover:text-rose-400 transition-colors" title="Archive">{{template "icon-trash"}}</button>
+          <form method="post" action="/ghosts/{{.Username}}/delete" class="inline" onsubmit="return confirm('Delete ghost {{.Username}}? This removes it from the dashboard and ghosts.json.');">
+            <button class="text-slate-500 hover:text-rose-400 transition-colors" title="Delete">{{template "icon-trash"}}</button>
           </form>
           {{end}}
         </td>
@@ -296,7 +296,7 @@
     <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
       <div class="flex items-center justify-between">
         <span class="text-xs uppercase tracking-widest font-bold {{platformColor .Platform}}">{{.Platform}}</span>
-        {{if eq .Status "active"}}<span class="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-300"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>active</span>{{else}}<span class="text-[10px] font-semibold text-slate-500">inactive</span>{{end}}
+        {{if eq .Status "active"}}<span class="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-300"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>active</span>{{else if eq .Status "triggered"}}<span class="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-300"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>triggered</span>{{else}}<span class="text-[10px] font-semibold text-slate-500">inactive</span>{{end}}
       </div>
       <p class="font-mono text-xs mt-2 text-slate-300 truncate" title="{{.ExternalID}}">{{.ExternalID}}</p>
       <p class="text-[11px] text-slate-500 mt-0.5 font-mono truncate">{{.Username}}</p>

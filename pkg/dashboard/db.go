@@ -212,7 +212,9 @@ func (d *DB) ListGhosts() ([]Ghost, error) {
 	return out, rows.Err()
 }
 
-// UpsertGhost inserts or updates a ghost by username.
+// UpsertGhost inserts or updates a ghost by username. Existing status is
+// preserved: a ghost that has been triggered or archived stays that way even
+// when re-imported from ghosts.json.
 func (d *DB) UpsertGhost(g Ghost) error {
 	if g.Status == "" {
 		g.Status = "active"
@@ -228,9 +230,18 @@ func (d *DB) UpsertGhost(g Ghost) error {
 			platform = excluded.platform,
 			mesh_group = COALESCE(excluded.mesh_group, ghosts.mesh_group),
 			access_key_id = COALESCE(excluded.access_key_id, ghosts.access_key_id),
-			status = excluded.status`,
+			status = CASE
+				WHEN ghosts.status IN ('triggered', 'archived') THEN ghosts.status
+				ELSE excluded.status
+			END`,
 		g.Username, g.PolicyName, g.Platform, g.MeshGroup,
 		g.AccessKeyID, g.AccessKeyID, g.Status, g.CreatedAt)
+	return err
+}
+
+// DeleteGhost removes a ghost entirely from the database.
+func (d *DB) DeleteGhost(username string) error {
+	_, err := d.Exec(`DELETE FROM ghosts WHERE username = ?`, username)
 	return err
 }
 

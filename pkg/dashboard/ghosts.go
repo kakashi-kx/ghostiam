@@ -14,7 +14,7 @@ import (
 
 // handleGhosts renders the ghost management page.
 func (s *DashboardServer) handleGhosts(w http.ResponseWriter, r *http.Request) {
-	_, _ = s.syncFromDisk()
+	note, _ := s.syncFromDisk()
 	ghosts, err := s.db.ListGhosts()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -27,6 +27,7 @@ func (s *DashboardServer) handleGhosts(w http.ResponseWriter, r *http.Request) {
 		ActiveNav: "ghosts",
 		Ghosts:    ghosts,
 		Stats:     stats,
+		SyncNote:  note,
 	})
 }
 
@@ -84,10 +85,15 @@ func (s *DashboardServer) handleGhostDeploy(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// handleGhostArchive marks a ghost as archived.
-func (s *DashboardServer) handleGhostArchive(w http.ResponseWriter, r *http.Request) {
+// handleGhostDelete removes a ghost from both the database and ghosts.json so
+// the dashboard and CLI stay in sync.
+func (s *DashboardServer) handleGhostDelete(w http.ResponseWriter, r *http.Request) {
 	username := mux.Vars(r)["username"]
-	if err := s.db.ArchiveGhost(username); err != nil {
+	if err := s.db.DeleteGhost(username); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := store.NewLocalStore("ghosts.json").DeleteGhost(username); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
