@@ -7,7 +7,7 @@
       <p class="text-sm text-slate-400 mt-0.5">Deployed decoys, live detections, and mapped attack journeys.</p>
     </div>
     <div class="flex items-center gap-2 text-xs text-slate-400">
-      {{if .SyncNote}}<span class="card px-3 py-1.5"><span class="text-emerald-300 font-semibold">synced</span> {{.SyncNote}}</span>{{end}}
+      <span class="card px-3 py-1.5">ghosts: {{.Stats.Ghosts}} · mesh: {{.Stats.MeshGroups}} · journeys: {{.Stats.Journeys}}</span>
       <a href="/reports/export?format=json" class="btn btn-ghost">{{template "icon-download"}}<span>Export JSON</span></a>
       <a href="/reports/export?format=pdf" class="btn btn-ghost">{{template "icon-download"}}<span>PDF report</span></a>
     </div>
@@ -22,8 +22,8 @@
           <h2 class="text-sm font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">{{template "icon-activity"}} Traffic &amp; Tactics</h2>
           <span class="text-[10px] uppercase tracking-widest text-slate-500">24h window</span>
         </div>
-        <div class="h-56">
-          <canvas id="byHourChart"></canvas>
+        <div class="h-32">
+          <canvas id="trafficChart"></canvas>
         </div>
       </div>
 
@@ -78,14 +78,14 @@
   const apiKey = {{.APIKey}} ? encodeURIComponent({{.APIKey}}) : '';
   const statsURL = '/api/v1/stats' + (apiKey ? '?api_key=' + apiKey : '');
 
-  let byHourChart, severityChart, actionsChart;
+  let trafficChart, severityChart, actionsChart;
 
   function renderCharts(data) {
     const byHour = data.alerts_by_hour || [];
     const risk = data.risk_distribution || {};
     const acts = data.top_actions || [];
 
-    const byHourLabels = byHour.map(h => h.hour + 'h');
+    const byHourLabels = byHour.map(h => h.hour + ':00');
     const byHourValues = byHour.map(h => h.count);
 
     const sevLabels = [];
@@ -102,10 +102,10 @@
     const actLabels = acts.map(a => a.action);
     const actValues = acts.map(a => a.count);
 
-    if (byHourChart) {
-      byHourChart.data.labels = byHourLabels;
-      byHourChart.data.datasets[0].data = byHourValues;
-      byHourChart.update();
+    if (trafficChart) {
+      trafficChart.data.labels = byHourLabels;
+      trafficChart.data.datasets[0].data = byHourValues;
+      trafficChart.update();
     }
     if (severityChart) {
       severityChart.data.labels = sevLabels;
@@ -135,7 +135,7 @@
     }
   }
 
-  byHourChart = new Chart(document.getElementById('byHourChart'), {
+  trafficChart = new Chart(document.getElementById('trafficChart'), {
     type: 'line',
     data: { labels: [], datasets: [{
       label: 'alerts', data: [],

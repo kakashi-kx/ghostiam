@@ -411,12 +411,14 @@ func (d *DB) RiskDistribution() (map[string]int, error) {
 	return out, rows.Err()
 }
 
-// AlertsByHour returns alert counts per hour (UTC) over the last 24h, padded so
-// every hour 00..23 appears (charts need a continuous window).
+// AlertsByHour returns alert counts per UTC hour over the last 24h, padded so
+// every hour 00..23 appears (charts need a continuous window). Timestamps are
+// parsed in Go so the bucketing is independent of the stored text format.
 func (d *DB) AlertsByHour() ([]HourCount, error) {
-	rows, err := d.Query(`SELECT CAST(strftime('%H', created_at) AS INTEGER) AS h, COUNT(*) FROM alerts
-		WHERE created_at >= datetime('now', '-24 hours')
-		GROUP BY h ORDER BY h`)
+	now := time.Now().UTC()
+	cutoff := now.Add(-24 * time.Hour)
+
+	rows, err := d.Query(`SELECT created_at FROM alerts WHERE created_at IS NOT NULL AND created_at != ''`)
 	if err != nil {
 		return nil, err
 	}
@@ -424,11 +426,19 @@ func (d *DB) AlertsByHour() ([]HourCount, error) {
 
 	counts := map[int]int{}
 	for rows.Next() {
-		var h, n int
-		if err := rows.Scan(&h, &n); err != nil {
+		var ts string
+		if err := rows.Scan(&ts); err != nil {
 			return nil, err
 		}
-		counts[h] = n
+		t, ok := parseAlertTime(ts)
+		if !ok {
+			continue
+		}
+		t = t.UTC()
+		if t.Before(cutoff) || t.After(now) {
+			continue
+		}
+		counts[t.Hour()]++
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -439,6 +449,24 @@ func (d *DB) AlertsByHour() ([]HourCount, error) {
 		out = append(out, HourCount{Hour: fmt.Sprintf("%02d", h), Count: counts[h]})
 	}
 	return out, nil
+}
+
+// parseAlertTime parses a stored timestamp in any layout the CLI or dashboard
+// may have written, so hour bucketing never silently drops rows.
+func parseAlertTime(s string) (time.Time, bool) {
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05 -0700 MST",
+		"2006-01-02 15:04:05",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 // ---------------------------------------------------------------------------

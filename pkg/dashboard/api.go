@@ -36,6 +36,7 @@ func (s *DashboardServer) handleAPIStats(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"generated_at":      time.Now().UTC().Format(time.RFC3339),
+		"ghosts":            stats.Ghosts,
 		"ghosts_active":     stats.GhostsActive,
 		"ghosts_triggered":  stats.GhostsTriggered,
 		"alerts_total":      stats.AlertsTotal,

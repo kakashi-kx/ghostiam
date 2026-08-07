@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
-	"github.com/kakashi-kx/ghostiam/pkg/journey"
 	"github.com/kakashi-kx/ghostiam/pkg/mesh"
 	"github.com/kakashi-kx/ghostiam/pkg/store"
 )
@@ -78,8 +76,8 @@ func (s *DashboardServer) buildStats() (*StatsView, error) {
 		return nil, err
 	}
 
-	_ = archived
 	return &StatsView{
+		Ghosts:           active + triggered + archived,
 		GhostsActive:     active,
 		GhostsTriggered:  triggered,
 		AlertsTotal:      alertsTotal,
@@ -111,13 +109,6 @@ func (s *DashboardServer) syncFromDisk() (string, error) {
 		notes = append(notes, "mesh: "+err.Error())
 	} else if n > 0 {
 		notes = append(notes, fmt.Sprintf("mesh: %d", n))
-	}
-
-	// Attack journeys from attack-journey-*.json
-	if n, err := syncJourneys(s); err != nil {
-		notes = append(notes, "journeys: "+err.Error())
-	} else if n > 0 {
-		notes = append(notes, fmt.Sprintf("journeys: %d", n))
 	}
 
 	return joinNotes(notes), nil
@@ -250,62 +241,6 @@ func syncMesh(s *DashboardServer) (int, error) {
 	}
 
 	return n, nil
-}
-
-func syncJourneys(s *DashboardServer) (int, error) {
-	files, err := filepath.Glob("attack-journey-*.json")
-	if err != nil || len(files) == 0 {
-		return 0, nil
-	}
-	n := 0
-	for _, f := range files {
-		g, err := journey.Load(f)
-		if err != nil {
-			continue
-		}
-		steps, tactics := journeyToView(g)
-		stepsJSON, _ := json.Marshal(steps)
-		tacticsJSON, _ := json.Marshal(tactics)
-		hash := hashSource(string(stepsJSON))
-
-		if _, err := s.db.InsertJourney(Journey{
-			GhostUsername:   g.GhostUsername,
-			StepsJSON:       string(stepsJSON),
-			MermaidDiagram:  journey.ToMermaid(g),
-			MitreTactics:    string(tacticsJSON),
-			RiskScore:       journey.RiskScore(g),
-			DurationSeconds: g.Duration.Seconds(),
-			SourceHash:      hash,
-			CreatedAt:       g.StartTime.Format(time.RFC3339),
-		}); err == nil {
-			n++
-		}
-	}
-	return n, nil
-}
-
-// journeyToView converts an AttackGraph into display steps + MITRE tactics.
-func journeyToView(g *journey.AttackGraph) ([]JourneyStepView, []string) {
-	seen := map[string]bool{}
-	var steps []JourneyStepView
-	var tactics []string
-	for i, node := range g.Nodes {
-		tech := node.MitreTechnique()
-		if !seen[tech] && tech != "—" {
-			seen[tech] = true
-			tactics = append(tactics, tech)
-		}
-		steps = append(steps, JourneyStepView{
-			Index:     i + 1,
-			Service:   node.Service,
-			Action:    node.Action,
-			SourceIP:  node.SourceIP,
-			Severity:  node.Severity,
-			Technique: tech,
-			Timestamp: node.Timestamp.Format(time.RFC3339),
-		})
-	}
-	return steps, tactics
 }
 
 // hashSource returns a short sha256 of an arbitrary string for dedup.

@@ -52,6 +52,7 @@ type ChartData struct {
 
 // StatsView carries all numbers shown on the dashboard home page.
 type StatsView struct {
+	Ghosts           int
 	GhostsActive     int
 	GhostsTriggered  int
 	AlertsTotal      int
