@@ -4,13 +4,84 @@
 
 Deploy decoy IAM identities across your AWS account and catch attacker reconnaissance instantly.
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8.svg)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/kakashi-kx/ghostiam/pulls)
+[![v2 Features](https://img.shields.io/badge/status-v2%20complete-brightgreen.svg)](https://github.com/kakashi-kx/ghostiam)
 
 ## Overview
 
 GhostIam fills your AWS account with decoy IAM users that look like privileged identities. When an attacker enumerates your IAM during reconnaissance and tries to use one, CloudTrail fires an alert to Slack within seconds. Zero false positives. Every alert is an attacker.
+
+## GhostIam v2 — Advanced Features
+
+GhostIam v2 is the most advanced open-source honeytoken framework:
+
+| Feature | What it does |
+|---------|--------------|
+| **Token Seeder** | Automatically "leaks" ghost keys to realistic bait — public GitHub repos, public S3 buckets, Pastebin |
+| **Ghost Mesh** | Deploys the same persona across AWS IAM + GitHub + Okta so a fire on one platform flags all correlated identities |
+| **Journey Replay** | Turns a fired ghost into a Mermaid attack graph with MITRE ATT&CK mappings, risk scoring, and Slack visualization |
+
+### Seeder demo
+
+![Seeder demo](https://via.placeholder.com/800x60/0d1117/ffffff?text=Seeder+demo+GIF+coming+soon)
+
+### Mesh architecture
+
+```
+        ┌────────────────────────────  GHOST MESH  ────────────────────────────┐
+        │                                                                    │
+        │        ghost-prod-admin-a7f3 (one persona, three platforms)        │
+        │                                                                    │
+        │   ┌─────────────┐     ┌──────────────┐     ┌──────────────────┐    │
+        │   │   AWS IAM   │     │    GitHub    │     │      Okta        │    │
+        │   │ ghost user  │     │  contractor  │     │   fake profile   │    │
+        │   │ (decoy pol) │     │    profile   │     │ (okta-ghosts)    │    │
+        │   └─────┬───────┘     └──────┬───────┘     └────────┬─────────┘    │
+        │         │                    │                      │              │
+        │         └──────────────┬─────┴──────────────────────┘              │
+        │                        │ correlated by username                    │
+        │                   ┌────┴─────┐                                      │
+        │                   │  Alert   │  "This ghost exists on 3 platforms"  │
+        │                   └──────────┘                                      │
+        └────────────────────────────────────────────────────────────────────┘
+```
+
+### Journey replay example output
+
+```
+$ ghostiam simulate --local --username ghost-prod-db-read-a7f3c2 --journey
+
+🔴 ATTACKER JOURNEY — ghost-prod-db-read-a7f3c2
+   Risk: ▓▓▓▓▓ 10/10 (Critical)
+   Steps: 5   Duration: 28s
+
+graph TD
+    N0[sts:GetCallerIdentity<br/>RECON]
+    N1[iam:ListRoles<br/>PRIVILEGE-ESCALATION]
+    N2[s3:ListBuckets<br/>DISCOVERY]
+    N3[s3:GetObject<br/>DATA-ACCESS]
+    N4[ec2:DescribeInstances<br/>LATERAL-MOVEMENT]
+    N0 --> N1
+    N1 --> N2
+    N2 --> N3
+    N3 --> N4
+
+Timeline:
+  1. `sts:GetCallerIdentity` (recon) from 203.0.113.42
+     MITRE: T1087.004 — Account Discovery
+  2. `iam:ListRoles` (privilege-escalation) from 203.0.113.42
+     MITRE: T1069.002 — Permission Groups Discovery
+  3. `s3:ListBuckets` (discovery) from 203.0.113.42
+     MITRE: T1526 — Cloud Service Discovery
+  4. `s3:GetObject` (data-access) from 198.51.100.7
+     MITRE: T1530 — Data from Cloud Storage
+  5. `ec2:DescribeInstances` (lateral-movement) from 198.51.100.7
+     MITRE: T1580 — Cloud Infrastructure Discovery
+```
+
+The same graph is posted to Slack as an enhanced Block Kit alert with the Mermaid render (via mermaid.ink), timeline, MITRE techniques, and a risk score bar.
 
 ## Architecture
 
@@ -71,11 +142,19 @@ make deploy-lambda
 # 6. Check your Slack — alert within seconds
 ```
 
+### Local demo (no AWS required)
+
+```bash
+./build/ghostiam deploy --local --count 5 --with-keys
+./build/ghostiam status --local
+./build/ghostiam simulate --local --username ghost-prod-db-read-a7f3c2 --journey
+```
+
 ## Commands
 
 ### `ghostiam deploy`
 
-Deploy ghost IAM users into your AWS account.
+Deploy ghost IAM users into your AWS account (or into `ghosts.json` with `--local`).
 
 | Flag | Shorthand | Default | Description |
 |------|-----------|---------|-------------|
@@ -83,6 +162,7 @@ Deploy ghost IAM users into your AWS account.
 | `--prefix` | `-p` | `prod` | Name prefix for ghost users (e.g. `ghost-prod-...`) |
 | `--region` | `-r` | `us-east-1` | AWS region |
 | `--with-keys` | | `false` | Generate access keys for each ghost user |
+| `--local` | `-l` | `false` | Use local JSON store instead of AWS IAM |
 
 ```bash
 # Deploy 20 ghost users with the "prod" prefix
@@ -100,9 +180,42 @@ Simulate attacker activity using ghost credentials to trigger detection.
 |------|-----------|---------|-------------|
 | `--username` | `-u` | *(required)* | Ghost username to simulate activity with |
 | `--region` | `-r` | `us-east-1` | AWS region |
+| `--local` | `-l` | `false` | Look up the ghost in `ghosts.json` |
+| `--journey` | | `false` | Capture and visualize the attacker journey |
+
+### `ghostiam seed`
+
+Automatically "leak" ghost access keys to realistic bait locations.
 
 ```bash
-./build/ghostiam simulate --username ghost-prod-db-read-a7f3c2
+ghostiam seed github     # private repo -> committed keys -> flipped public
+ghostiam seed s3         # public S3 bucket with config.json + backup.sql
+ghostiam seed pastebin   # local Pastebin-style leak (pastebin-sim.html)
+ghostiam seed all        # try every platform
+
+ghostiam seed github --ghost-user ghost-prod-db-read-a7f3c2
+```
+
+Credentials used per platform: `GITHUB_TOKEN` for GitHub, standard AWS credentials for S3. Missing credentials fail gracefully while other platforms continue.
+
+### `ghostiam mesh`
+
+Deploy the same ghost persona across AWS + GitHub + Okta.
+
+```bash
+ghostiam mesh deploy --count 2 --prefix demo --platforms all
+ghostiam mesh status
+```
+
+Platforms without live credentials are simulated locally so the demo always works.
+
+### `ghostiam journey` and `ghostiam replay`
+
+Generate, visualize, and replay attacker journeys.
+
+```bash
+ghostiam journey --username ghost-prod-db-read-a7f3c2
+ghostiam replay --file attack-journey-2026-08-07.json
 ```
 
 ## Decoy Policies
@@ -151,20 +264,25 @@ The Lambda posts a Block Kit message to Slack. Here's what an alert looks like:
 └──────────────────────────────────────────────────┘
 ```
 
+With `--journey`, the enhanced alert adds the Mermaid attack graph, MITRE ATT&CK mappings, a risk score bar, and a "view journey" link.
+
 ## Requirements
 
-- Go 1.21+
-- AWS account with CloudTrail enabled
-- Terraform 1.5+
+- Go 1.25+
+- AWS account with CloudTrail enabled (AWS mode only)
+- Terraform 1.5+ (detection infra only)
 - Slack workspace (for a webhook URL)
+- `GITHUB_TOKEN` (only for GitHub seeding / mesh)
 
 ## Roadmap
 
 - [x] AWS IAM ghost users
-- [ ] Okta ghost identities
-- [ ] GitHub ghost users
-- [ ] Multi-cloud support
-- [ ] Behavioral analysis of attacker actions
+- [x] Local JSON store mode (`--local`)
+- [x] Ghost token seeder (GitHub, S3, Pastebin)
+- [x] Cross-platform ghost mesh (AWS + GitHub + Okta)
+- [x] Attacker journey replay + MITRE ATT&CK mapping
+- [ ] Multi-cloud support (Azure, GCP)
+- [ ] Okta real-org provisioning
 - [ ] Security Hub integration
 - [ ] Web dashboard
 

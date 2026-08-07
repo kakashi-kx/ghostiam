@@ -49,6 +49,16 @@ Two modes, chosen with --local. No guessing, no fallback:
     GhostIam=true. Any API call they make is captured by CloudTrail, filtered
     by EventBridge, and alerted on by the ghostiam-detector Lambda.
 
+Commands:
+  deploy    Deploy ghost users locally or in AWS
+  simulate  Simulate attacker activity to trigger detection
+  status    Show deployed ghost users
+  clean     Remove deployed ghost users
+  seed      Leak ghost access keys to realistic bait locations
+  mesh      Correlated ghost identities across AWS + GitHub + Okta
+  journey   Generate and visualize an attacker journey
+  replay    Play back a saved attacker journey
+
 Run "ghostiam <command> --help" for details on each command.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
