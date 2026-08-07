@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/kakashi-kx/ghostiam/pkg/deploy"
+	"github.com/kakashi-kx/ghostiam/pkg/journey"
 	"github.com/kakashi-kx/ghostiam/pkg/mesh"
 	"github.com/kakashi-kx/ghostiam/pkg/seeder"
 	"github.com/kakashi-kx/ghostiam/pkg/store"
@@ -165,6 +166,23 @@ var meshStatusCmd = &cobra.Command{
 	RunE:  runMeshStatus,
 }
 
+var journeyCmd = &cobra.Command{
+	Use:   "journey",
+	Short: "Generate and visualize an attacker journey for a ghost user",
+	Long: `Capture or simulate the attacker's full journey against a ghost user,
+render it as a Mermaid attack graph, post the enhanced alert to Slack, and save
+it for later replay.`,
+	RunE: runJourney,
+}
+
+var replayCmd = &cobra.Command{
+	Use:   "replay",
+	Short: "Replay a saved attack journey from a JSON file",
+	Long: `Load a saved attack journey, print its Mermaid diagram to the terminal,
+and re-post it to Slack.`,
+	RunE: runReplay,
+}
+
 func init() {
 	deployCmd.Flags().IntP("count", "c", 10, "Number of ghost users to create")
 	deployCmd.Flags().StringP("prefix", "p", "prod", "Name prefix for ghost users (e.g. ghost-prod-...)")
@@ -175,6 +193,7 @@ func init() {
 	simulateCmd.Flags().StringP("username", "u", "", "Ghost username to simulate activity with")
 	simulateCmd.Flags().StringP("region", "r", "us-east-1", "AWS region (AWS mode only)")
 	simulateCmd.Flags().BoolP("local", "l", false, "Look up the ghost user in the local JSON store")
+	simulateCmd.Flags().Bool("journey", false, "Capture and visualize the attacker journey (local mode)")
 	_ = simulateCmd.MarkFlagRequired("username")
 
 	statusCmd.Flags().BoolP("local", "l", false, "Show ghosts from the local JSON store")
@@ -196,7 +215,14 @@ func init() {
 	meshDeployCmd.Flags().BoolP("local", "l", false, "Force local simulation (no real API calls)")
 	meshCmd.AddCommand(meshDeployCmd, meshStatusCmd)
 
-	rootCmd.AddCommand(deployCmd, simulateCmd, statusCmd, cleanCmd, seedCmd, meshCmd)
+	journeyCmd.Flags().StringP("username", "u", "", "Ghost username to visualize the attacker journey for")
+	journeyCmd.Flags().String("save", "", "Path to save the journey JSON (default attack-journey-<date>.json)")
+	_ = journeyCmd.MarkFlagRequired("username")
+
+	replayCmd.Flags().StringP("file", "f", "", "Path to a saved attack journey JSON file")
+	_ = replayCmd.MarkFlagRequired("file")
+
+	rootCmd.AddCommand(deployCmd, simulateCmd, statusCmd, cleanCmd, seedCmd, meshCmd, journeyCmd, replayCmd)
 }
 
 // addGhostUserFlag registers the --ghost-user flag used by the seed subcommands.
@@ -324,6 +350,7 @@ func runSimulate(cmd *cobra.Command, _ []string) error {
 	username, _ := cmd.Flags().GetString("username")
 	region, _ := cmd.Flags().GetString("region")
 	local, _ := cmd.Flags().GetBool("local")
+	withJourney, _ := cmd.Flags().GetBool("journey")
 
 	if local {
 		// PURE LOCAL PATH
@@ -338,6 +365,11 @@ func runSimulate(cmd *cobra.Command, _ []string) error {
 		fmt.Printf("   Created: %s\n", ghost.CreatedAt)
 
 		webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
+
+		if withJourney {
+			return runJourneyForGhost(ghost.Username, "", webhookURL)
+		}
+
 		if webhookURL == "" {
 			fmt.Printf("   ⚠️  SLACK_WEBHOOK_URL not set. Alert not sent.\n")
 			fmt.Printf("   Set it: export SLACK_WEBHOOK_URL=\"https://hooks.slack.com/services/...\"\n")
@@ -587,6 +619,136 @@ func awsArnNote(arn string) string {
 		return " (local)"
 	}
 	return ""
+}
+
+// ---------------------------------------------------------------------------
+// journey + replay
+// ---------------------------------------------------------------------------
+
+func runJourney(cmd *cobra.Command, _ []string) error {
+	username, _ := cmd.Flags().GetString("username")
+	savePath, _ := cmd.Flags().GetString("save")
+
+	s := store.NewLocalStore(localStoreFile)
+	ghost, err := s.FindGhost(username)
+	if err != nil {
+		return fmt.Errorf("ghost user '%s' not found in ghosts.json\n  Deploy first: ghostiam deploy --local --count 5", username)
+	}
+
+	webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
+	return runJourneyForGhost(ghost.Username, savePath, webhookURL)
+}
+
+func runReplay(cmd *cobra.Command, _ []string) error {
+	file, _ := cmd.Flags().GetString("file")
+
+	graph, err := journey.Load(file)
+	if err != nil {
+		return err
+	}
+
+	printJourney(graph)
+
+	webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
+	if webhookURL == "" {
+		fmt.Println("   ⚠️  SLACK_WEBHOOK_URL not set. Journey alert not sent.")
+		return nil
+	}
+	if err := sendJourneyAlert(webhookURL, graph.GhostUsername, graph); err != nil {
+		fmt.Printf("   ❌ Slack journey alert failed: %v\n", err)
+		return nil
+	}
+	fmt.Println("   ✅ Journey alert sent to Slack — check your channel")
+	return nil
+}
+
+// runJourneyForGhost captures the attacker journey for a ghost, prints it,
+// saves it, and posts the enhanced alert to Slack.
+func runJourneyForGhost(username, savePath, webhookURL string) error {
+	graph, err := journey.Capture(context.Background(), username)
+	if err != nil {
+		return fmt.Errorf("journey capture: %w", err)
+	}
+
+	printJourney(graph)
+
+	if savePath == "" {
+		savePath = fmt.Sprintf("attack-journey-%s.json", time.Now().UTC().Format("2006-01-02"))
+	}
+	if err := journey.Save(graph, savePath); err != nil {
+		return err
+	}
+	fmt.Printf("   💾 Journey saved: %s\n", savePath)
+
+	if webhookURL == "" {
+		fmt.Println("   ⚠️  SLACK_WEBHOOK_URL not set. Journey alert not sent.")
+		return nil
+	}
+	if err := sendJourneyAlert(webhookURL, username, graph); err != nil {
+		fmt.Printf("   ❌ Slack journey alert failed: %v\n", err)
+		return nil
+	}
+	fmt.Println("   ✅ Journey alert sent to Slack — check your channel")
+	return nil
+}
+
+// printJourney renders the attack graph, risk score, and timeline to stdout.
+func printJourney(g *journey.AttackGraph) {
+	score := journey.RiskScore(g)
+	fmt.Printf("\n🔴 ATTACKER JOURNEY — %s\n", g.GhostUsername)
+	fmt.Printf("   Risk: %s %d/10 (%s)\n", journey.RiskBar(score), score, journey.RiskLabel(score))
+	fmt.Printf("   Steps: %d   Duration: %s\n", len(g.Nodes), g.Duration.Round(time.Second))
+	fmt.Println()
+	fmt.Println(journey.ToMermaid(g))
+	fmt.Println()
+	fmt.Println("Timeline:")
+	for i, n := range g.Nodes {
+		fmt.Printf("  %d. `%s` (%s) from %s\n", i+1, n.FQN(), n.Severity, n.SourceIP)
+		fmt.Printf("     MITRE: %s\n", n.MitreTechnique())
+	}
+	fmt.Println()
+}
+
+// sendJourneyAlert posts the enhanced attacker-journey Block Kit message to
+// Slack, including the Mermaid render, timeline, MITRE mappings, and risk bar.
+func sendJourneyAlert(webhookURL, ghostUsername string, g *journey.AttackGraph) error {
+	headerText := slack.NewTextBlockObject("plain_text", "🔴 ATTACKER JOURNEY DETECTED", false, false)
+	headerBlock := slack.NewHeaderBlock(headerText)
+
+	score := journey.RiskScore(g)
+	diagramURL := journey.MermaidImageURL(journey.ToMermaid(g))
+
+	summaryText := fmt.Sprintf(
+		"*Ghost User:* `%s`\n*Steps:* %d\n*Duration:* %s\n*Source:* local simulation\n*Diagram:* <%s|view journey>",
+		ghostUsername, len(g.Nodes), g.Duration.Round(time.Second), diagramURL,
+	)
+	summaryBlock := slack.NewSectionBlock(slack.NewTextBlockObject("mrkdwn", summaryText, false, false), nil, nil)
+
+	var timeline strings.Builder
+	for i, n := range g.Nodes {
+		timeline.WriteString(fmt.Sprintf(
+			"*%d.* `%s` — %s\n   MITRE: %s\n",
+			i+1, n.FQN(), strings.ToUpper(n.Severity), n.MitreTechnique(),
+		))
+	}
+	timelineBlock := slack.NewSectionBlock(
+		slack.NewTextBlockObject("mrkdwn", "*Timeline:*\n"+timeline.String(), false, false),
+		nil, nil,
+	)
+
+	riskText := fmt.Sprintf("*Risk Score:* %s %d/10 (%s)", journey.RiskBar(score), score, journey.RiskLabel(score))
+	riskBlock := slack.NewSectionBlock(slack.NewTextBlockObject("mrkdwn", riskText, false, false), nil, nil)
+
+	footerText := slack.NewTextBlockObject("mrkdwn", "GhostIam — deploy decoys, detect recon. github.com/kakashi-kx/ghostiam", false, false)
+	footerBlock := slack.NewContextBlock("", footerText)
+
+	msg := &slack.WebhookMessage{
+		Blocks: &slack.Blocks{
+			BlockSet: []slack.Block{headerBlock, summaryBlock, timelineBlock, riskBlock, footerBlock},
+		},
+	}
+
+	return slack.PostWebhook(webhookURL, msg)
 }
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,9 @@ okta-ghosts.json
 # Pastebin-style leak simulator output
 /pastebin-sim.html
 
+# Saved attacker journey files
+attack-journey-*.json
+
 # Terraform
 /terraform/.terraform/
 /terraform/*.tfstate
