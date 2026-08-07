@@ -6,7 +6,7 @@ import (
 
 // handleSeeds renders the seed management page.
 func (s *DashboardServer) handleSeeds(w http.ResponseWriter, r *http.Request) {
-	_, _ = s.syncFromDisk()
+	note, _ := s.syncFromDisk()
 	seeds, err := s.db.ListSeeds()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -21,6 +21,7 @@ func (s *DashboardServer) handleSeeds(w http.ResponseWriter, r *http.Request) {
 		Seeds:     seeds,
 		Ghosts:    ghosts,
 		Stats:     stats,
+		SyncNote:  note,
 	})
 }
 

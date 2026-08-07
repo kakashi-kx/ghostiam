@@ -10,7 +10,7 @@ import (
 
 // handleJourneys renders the journey list page.
 func (s *DashboardServer) handleJourneys(w http.ResponseWriter, r *http.Request) {
-	_, _ = s.syncFromDisk()
+	note, _ := s.syncFromDisk()
 	journeys, err := s.db.ListJourneys()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -23,6 +23,7 @@ func (s *DashboardServer) handleJourneys(w http.ResponseWriter, r *http.Request)
 		ActiveNav: "journeys",
 		Journeys:  journeys,
 		Stats:     stats,
+		SyncNote:  note,
 	})
 }
 

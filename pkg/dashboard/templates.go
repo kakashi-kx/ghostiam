@@ -95,6 +95,8 @@ func sevBadgeClass(sev string) string {
 		return "bg-amber-500/15 text-amber-300 border border-amber-500/40"
 	case "low":
 		return "bg-sky-500/15 text-sky-300 border border-sky-500/40"
+	case "info":
+		return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
 	default:
 		return "bg-slate-500/15 text-slate-300 border border-slate-500/40"
 	}
@@ -110,6 +112,8 @@ func sevDotClass(sev string) string {
 		return "bg-amber-500"
 	case "low":
 		return "bg-sky-500"
+	case "info":
+		return "bg-emerald-500"
 	default:
 		return "bg-slate-500"
 	}

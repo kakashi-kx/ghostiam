@@ -7,7 +7,7 @@ import (
 
 // handleAlerts renders the alert feed page.
 func (s *DashboardServer) handleAlerts(w http.ResponseWriter, r *http.Request) {
-	_, _ = s.syncFromDisk()
+	note, _ := s.syncFromDisk()
 	alerts, err := s.db.ListAlerts(50)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -20,6 +20,7 @@ func (s *DashboardServer) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		ActiveNav: "alerts",
 		Alerts:    alerts,
 		Stats:     stats,
+		SyncNote:  note,
 	})
 }
 

@@ -8,6 +8,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>
     tailwind.config = {
       theme: { extend: {
@@ -15,6 +16,9 @@
         boxShadow: { glow: '0 0 24px rgba(52,211,153,0.12)' },
       }}
     };
+    if (window.mermaid) {
+      mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'loose', flowchart: { useMaxWidth: true } });
+    }
   </script>
   <style>
     html { color-scheme: dark; }

@@ -52,9 +52,15 @@
 
     <div class="card p-5">
       <h2 class="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">{{template "icon-map"}} Flow diagram</h2>
-      <pre class="text-[11px] font-mono text-slate-300 leading-relaxed overflow-x-auto bg-slate-950/60 border border-slate-800 rounded-lg p-4 whitespace-pre-wrap">{{trim .MermaidDiagram}}</pre>
-      <p class="text-[11px] text-slate-500 mt-3">Rendered by the CLI via Mermaid. Paste the source into
-        <a class="text-sky-300 hover:underline" href="https://mermaid.live" target="_blank" rel="noopener">mermaid.live</a> for a graph view.</p>
+      <div class="bg-slate-950/60 border border-slate-800 rounded-lg p-4 overflow-x-auto">
+        <pre class="mermaid">{{.MermaidDiagram}}</pre>
+      </div>
+      <details class="mt-4">
+        <summary class="text-xs text-slate-500 hover:text-slate-300 cursor-pointer">Show Mermaid source</summary>
+        <pre class="text-[11px] font-mono text-slate-300 leading-relaxed overflow-x-auto bg-slate-950/60 border border-slate-800 rounded-lg p-4 mt-2 whitespace-pre-wrap">{{trim .MermaidDiagram}}</pre>
+      </details>
+      <p class="text-[11px] text-slate-500 mt-3">Rendered with Mermaid. Open the source in
+        <a class="text-sky-300 hover:underline" href="https://mermaid.live" target="_blank" rel="noopener">mermaid.live</a> for an editable graph view.</p>
     </div>
   </div>
 </div>
