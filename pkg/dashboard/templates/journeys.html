@@ -1,0 +1,24 @@
+{{define "content"}}
+<div class="space-y-6">
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-extrabold tracking-tight text-white">Attack Journeys</h1>
+      <p class="text-sm text-slate-400 mt-0.5">Full attacker kill-chains reconstructed step by step, mapped to MITRE.</p>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-slate-400">
+      {{if .Stats}}<span class="card px-3 py-1.5"><span class="text-violet-300 font-semibold">{{.Stats.Journeys}}</span> journeys captured</span>{{end}}
+      <a href="/reports/export?format=json" class="btn btn-ghost">{{template "icon-download"}}<span>Export</span></a>
+    </div>
+  </div>
+
+  <div class="card p-4 flex items-start gap-3 text-sm text-slate-400 bg-sky-500/5 border-sky-500/20">
+    {{template "icon-terminal"}}
+    <div>
+      Capture a journey from the CLI and it appears here automatically:
+      <code class="font-mono text-emerald-300">ghostiam simulate --local --username &lt;ghost&gt; --journey</code>
+    </div>
+  </div>
+
+  {{template "journeyList" .Journeys}}
+</div>
+{{end}}

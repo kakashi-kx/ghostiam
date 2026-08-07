@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/kakashi-kx/ghostiam/pkg/dashboard"
 	"github.com/kakashi-kx/ghostiam/pkg/deploy"
 	"github.com/kakashi-kx/ghostiam/pkg/journey"
 	"github.com/kakashi-kx/ghostiam/pkg/mesh"
@@ -58,6 +59,7 @@ Commands:
   mesh      Correlated ghost identities across AWS + GitHub + Okta
   journey   Generate and visualize an attacker journey
   replay    Play back a saved attacker journey
+  dashboard Serve the GhostIam web dashboard
 
 Run "ghostiam <command> --help" for details on each command.`,
 	SilenceUsage:  true,
@@ -377,12 +379,25 @@ func runSimulate(cmd *cobra.Command, _ []string) error {
 		webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
 
 		if withJourney {
-			return runJourneyForGhost(ghost.Username, "", webhookURL)
+			err := runJourneyForGhost(ghost.Username, "", webhookURL)
+			if err == nil {
+				return nil
+			}
+			return err
 		}
 
 		if webhookURL == "" {
 			fmt.Printf("   ⚠️  SLACK_WEBHOOK_URL not set. Alert not sent.\n")
 			fmt.Printf("   Set it: export SLACK_WEBHOOK_URL=\"https://hooks.slack.com/services/...\"\n")
+			postDashboardEvent(dashboard.EventIngest{Type: "alert", Alert: &dashboard.Alert{
+				GhostUsername: ghost.Username,
+				Platform:      "local",
+				SourceIP:      "127.0.0.1",
+				Action:        "sts:GetCallerIdentity",
+				Region:        "local",
+				Severity:      "critical",
+				RiskScore:     8,
+			}})
 			return nil
 		}
 
@@ -392,6 +407,16 @@ func runSimulate(cmd *cobra.Command, _ []string) error {
 		}
 
 		fmt.Printf("   ✅ Alert sent to Slack — check your channel\n")
+
+		postDashboardEvent(dashboard.EventIngest{Type: "alert", Alert: &dashboard.Alert{
+			GhostUsername: ghost.Username,
+			Platform:      "local",
+			SourceIP:      "127.0.0.1",
+			Action:        "sts:GetCallerIdentity",
+			Region:        "local",
+			Severity:      "critical",
+			RiskScore:     8,
+		}})
 		return nil
 	}
 
@@ -538,6 +563,14 @@ func seedToPlatform(p seeder.Seeder, req seeder.SeedRequest) error {
 		return err
 	}
 	fmt.Printf("  ✅ %s -> %s\n", payload.BaitFileName, payload.Location)
+
+	postDashboardEvent(dashboard.EventIngest{Type: "seed", Seed: &dashboard.Seed{
+		GhostUsername: req.GhostUsername,
+		Platform:      string(p.Name()),
+		LocationURL:   payload.Location,
+		BaitFilename:  payload.BaitFileName,
+		Status:        "active",
+	}})
 	return nil
 }
 
@@ -659,6 +692,10 @@ func runReplay(cmd *cobra.Command, _ []string) error {
 
 	printJourney(graph)
 
+	ing := journeyIngestFromGraph(graph)
+	al := alertFromJourney(graph.GhostUsername, graph)
+	postDashboardEvent(dashboard.EventIngest{Type: "journey", Journey: &ing, Alert: &al})
+
 	webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
 	if webhookURL == "" {
 		fmt.Println("   ⚠️  SLACK_WEBHOOK_URL not set. Journey alert not sent.")
@@ -689,6 +726,10 @@ func runJourneyForGhost(username, savePath, webhookURL string) error {
 		return err
 	}
 	fmt.Printf("   💾 Journey saved: %s\n", savePath)
+
+	ing := journeyIngestFromGraph(graph)
+	al := alertFromJourney(username, graph)
+	postDashboardEvent(dashboard.EventIngest{Type: "journey", Journey: &ing, Alert: &al})
 
 	if webhookURL == "" {
 		fmt.Println("   ⚠️  SLACK_WEBHOOK_URL not set. Journey alert not sent.")

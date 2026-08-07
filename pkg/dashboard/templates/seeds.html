@@ -1,0 +1,48 @@
+{{define "content"}}
+<div class="space-y-6">
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-extrabold tracking-tight text-white">Token Seeds</h1>
+      <p class="text-sm text-slate-400 mt-0.5">Bait credentials planted in GitHub, S3, or pastebins to lure attackers.</p>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-slate-400">
+      {{if .Stats}}<span class="card px-3 py-1.5"><span class="text-amber-300 font-semibold">{{.Stats.Seeds}}</span> active seeds</span>{{end}}
+    </div>
+  </div>
+
+  <div class="card p-5">
+    <h2 class="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Record a seed</h2>
+    <form method="post" action="/seeds/seed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Ghost user</label>
+        <input name="ghost_user" list="ghost-list" value="{{.DemoGhostUser}}" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50">
+        <datalist id="ghost-list">
+          {{range .Ghosts}}<option value="{{.Username}}">{{end}}
+        </datalist>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Platform</label>
+        <select name="platform" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50">
+          <option value="github">github</option>
+          <option value="s3">s3</option>
+          <option value="pastebin">pastebin</option>
+        </select>
+      </div>
+      <div class="lg:col-span-2">
+        <label class="block text-xs text-slate-500 mb-1">Location URL</label>
+        <input name="location_url" placeholder="https://github.com/org/repo/blob/main/keys.txt" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50">
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Bait file</label>
+        <input name="bait_filename" value="aws_credentials.txt" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50">
+      </div>
+      <div class="md:col-span-2 lg:col-span-5 flex justify-end">
+        <button class="btn btn-primary">{{template "icon-plus"}}<span>Plant seed</span></button>
+      </div>
+    </form>
+    <p class="text-[11px] text-slate-500 mt-3">The CLI plants real seeds with <code class="font-mono text-emerald-300">ghostiam seed all --ghost-user &lt;ghost&gt;</code>; this form records a seed by hand.</p>
+  </div>
+
+  {{template "seedTable" .Seeds}}
+</div>
+{{end}}

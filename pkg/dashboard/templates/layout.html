@@ -1,0 +1,128 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.PageTitle}} · GhostIam</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','monospace'] },
+        boxShadow: { glow: '0 0 24px rgba(52,211,153,0.12)' },
+      }}
+    };
+  </script>
+  <style>
+    html { color-scheme: dark; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(148,163,184,0.12); border-radius: 1rem; backdrop-filter: blur(8px); }
+    .btn { display:inline-flex; align-items:center; gap:.5rem; padding:.55rem 1rem; border-radius:.75rem; font-size:.8rem; font-weight:600; transition: all .15s ease; }
+    .btn-primary { background: linear-gradient(135deg,#10b981,#06b6d4); color:#04121a; }
+    .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn-ghost { background: rgba(255,255,255,0.05); border:1px solid rgba(148,163,184,0.2); color:#cbd5e1; }
+    .btn-ghost:hover { background: rgba(255,255,255,0.09); }
+    .live-pill { display:inline-flex; align-items:center; gap:.5rem; padding:.4rem .8rem; border-radius:9999px; font-size:.7rem; font-weight:700; letter-spacing:.1em; background:rgba(16,185,129,.12); color:#6ee7b7; border:1px solid rgba(16,185,129,.3); }
+    .live-pill .dot { width:.5rem; height:.5rem; border-radius:9999px; background:#34d399; animation: pulse-dot 1.6s ease-in-out infinite; }
+    @keyframes pulse-dot { 0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,.5)} 50%{box-shadow:0 0 0 6px rgba(52,211,153,0)} }
+    .nav-link { display:inline-flex; align-items:center; gap:.5rem; padding:.5rem .85rem; border-radius:.75rem; font-size:.85rem; color:#94a3b8; transition:all .15s ease; }
+    .nav-link:hover { color:#e2e8f0; background:rgba(255,255,255,.05); }
+    .nav-link.active { color:#6ee7b7; background:rgba(16,185,129,.12); }
+    ::-webkit-scrollbar { width:9px; height:9px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:rgba(148,163,184,.25); border-radius:9999px; }
+    .toast-in { animation: toast-in .25s ease-out; }
+    @keyframes toast-in { from { opacity:0; transform: translateY(12px) scale(.97); } to { opacity:1; transform: translateY(0) scale(1); } }
+    .fade-flash { animation: fade-flash 1.5s ease-out; }
+    @keyframes fade-flash { 0% { background:rgba(52,211,153,.15);} 100% { background:transparent; } }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div class="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(6,182,212,0.08),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(16,185,129,0.06),transparent_55%),linear-gradient(180deg,#020617,#0f172a)]"></div>
+
+  <nav class="sticky top-0 z-40 bg-slate-900/70 backdrop-blur-md border-b border-slate-800">
+    <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-slate-950 shadow-glow">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V20a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-5.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7z"/></svg>
+        </div>
+        <div>
+          <span class="font-extrabold text-lg tracking-tight">GhostIam</span>
+          <span class="block text-[10px] uppercase tracking-widest text-slate-500 -mt-0.5">honeytoken ops</span>
+        </div>
+      </a>
+      <div class="hidden md:flex items-center gap-1">
+        <a href="/" class="nav-link {{if eq .ActiveNav "dashboard"}}active{{end}}">{{template "icon-dashboard"}}<span>Dashboard</span></a>
+        <a href="/ghosts" class="nav-link {{if eq .ActiveNav "ghosts"}}active{{end}}">{{template "icon-users"}}<span>Ghosts</span></a>
+        <a href="/alerts" class="nav-link {{if eq .ActiveNav "alerts"}}active{{end}}">{{template "icon-bell"}}<span>Alerts</span></a>
+        <a href="/journeys" class="nav-link {{if eq .ActiveNav "journeys"}}active{{end}}">{{template "icon-map"}}<span>Journeys</span></a>
+        <a href="/mesh" class="nav-link {{if eq .ActiveNav "mesh"}}active{{end}}">{{template "icon-globe"}}<span>Mesh</span></a>
+        <a href="/seeds" class="nav-link {{if eq .ActiveNav "seeds"}}active{{end}}">{{template "icon-anchor"}}<span>Seeds</span></a>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="live-pill"><span class="dot"></span>LIVE</span>
+      </div>
+    </div>
+    <div class="md:hidden container mx-auto px-4 pb-3 flex gap-1 overflow-x-auto">
+      <a href="/" class="nav-link {{if eq .ActiveNav "dashboard"}}active{{end}}">{{template "icon-dashboard"}}<span>Dashboard</span></a>
+      <a href="/ghosts" class="nav-link {{if eq .ActiveNav "ghosts"}}active{{end}}">{{template "icon-users"}}<span>Ghosts</span></a>
+      <a href="/alerts" class="nav-link {{if eq .ActiveNav "alerts"}}active{{end}}">{{template "icon-bell"}}<span>Alerts</span></a>
+      <a href="/journeys" class="nav-link {{if eq .ActiveNav "journeys"}}active{{end}}">{{template "icon-map"}}<span>Journeys</span></a>
+      <a href="/mesh" class="nav-link {{if eq .ActiveNav "mesh"}}active{{end}}">{{template "icon-globe"}}<span>Mesh</span></a>
+      <a href="/seeds" class="nav-link {{if eq .ActiveNav "seeds"}}active{{end}}">{{template "icon-anchor"}}<span>Seeds</span></a>
+    </div>
+  </nav>
+
+  <main class="container mx-auto px-4 py-6">
+    {{template "content" .}}
+  </main>
+
+  <footer class="container mx-auto px-4 py-8 text-center text-xs text-slate-600">
+    GhostIam · deploy decoys, detect recon · <span class="font-mono">github.com/kakashi-kx/ghostiam</span>
+  </footer>
+
+  <div id="toast-container" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+
+  <script>
+    // ---- Real-time SSE: live toasts on any page ----
+    (function () {
+      const apiKey = {{.APIKey}} ? encodeURIComponent({{.APIKey}}) : '';
+      const es = new EventSource('/alerts/stream' + (apiKey ? '?api_key=' + apiKey : ''));
+      es.onmessage = function (ev) {
+        try {
+          const msg = JSON.parse(ev.data);
+          window.dispatchEvent(new CustomEvent('ghostiam:event', { detail: msg }));
+          if (msg.type === 'alert') renderToast(msg.payload);
+        } catch (e) {}
+      };
+      window.__ghostiamSSE = es;
+    })();
+
+    function renderToast(a) {
+      const box = document.getElementById('toast-container');
+      if (!box || !a) return;
+      const sev = (a.severity || 'critical').toLowerCase();
+      const border = sev === 'critical' ? 'border-l-rose-500' : 'border-l-orange-500';
+      const icon = sev === 'critical'
+        ? '<div class="w-9 h-9 shrink-0 rounded-lg bg-rose-500/15 text-rose-300 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>'
+        : '<div class="w-9 h-9 shrink-0 rounded-lg bg-orange-500/15 text-orange-300 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>';
+      const el = document.createElement('div');
+      el.className = 'toast-in w-80 card border-l-4 ' + border + ' p-3.5 flex items-start gap-3 shadow-glow bg-slate-900/95';
+      el.innerHTML = icon +
+        '<div class="min-w-0">' +
+          '<div class="flex items-center gap-1.5"><span class="text-[10px] uppercase tracking-widest text-rose-300 font-bold">' + sev + '</span><span class="text-[10px] text-slate-500">just now</span></div>' +
+          '<p class="font-mono text-xs font-semibold text-slate-100 truncate">' + (a.ghost_username||'') + '</p>' +
+          '<p class="font-mono text-[11px] text-cyan-300 mt-0.5 truncate">' + (a.action||'') + '</p>' +
+          '<p class="text-[11px] text-slate-400 mt-0.5">' + (a.source_ip||'') + (a.risk_score ? ' · risk ' + a.risk_score + '/10' : '') + '</p>' +
+        '</div>' +
+        '<button onclick="this.parentElement.remove()" class="ml-auto text-slate-600 hover:text-slate-300 text-sm shrink-0">&times;</button>';
+      box.prepend(el);
+      setTimeout(function(){ el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(function(){ el.remove(); }, 450); }, 7000);
+    }
+  </script>
+</body>
+</html>
+{{end}}

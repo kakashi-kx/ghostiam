@@ -7,7 +7,7 @@ Deploy decoy IAM identities across your AWS account and catch attacker reconnais
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/kakashi-kx/ghostiam/pulls)
-[![v2 Features](https://img.shields.io/badge/status-v2%20complete-brightgreen.svg)](https://github.com/kakashi-kx/ghostiam)
+[![v3 Features](https://img.shields.io/badge/status-v3%20complete-brightgreen.svg)](https://github.com/kakashi-kx/ghostiam)
 
 ## Overview
 
@@ -22,6 +22,38 @@ GhostIam v2 is the most advanced open-source honeytoken framework:
 | **Token Seeder** | Automatically "leaks" ghost keys to realistic bait — public GitHub repos, public S3 buckets, Pastebin |
 | **Ghost Mesh** | Deploys the same persona across AWS IAM + GitHub + Okta so a fire on one platform flags all correlated identities |
 | **Journey Replay** | Turns a fired ghost into a Mermaid attack graph with MITRE ATT&CK mappings, risk scoring, and Slack visualization |
+
+## GhostIam v3 — Web Dashboard
+
+GhostIam v3 ships a real-time operations console (Go + HTMX + SQLite + Chart.js):
+
+| Page | What it shows |
+|------|---------------|
+| **Dashboard** | Live stat cards, alert traffic by hour, severity donut, top actions, and a live alert feed |
+| **Ghosts** | Deploy/archive decoys from the browser and inspect their keys and policies |
+| **Alerts** | Full alert feed with severity badges, source IPs, and a one-click alert simulator |
+| **Journeys** | Attack kill-chains as step timelines with MITRE tactics and Mermaid flow diagrams |
+| **Mesh** | Correlated personas as platform-leg cards (AWS / GitHub / Okta) |
+| **Seeds** | Record and track bait locations, keys, and files |
+
+Everything is live via Server-Sent Events: CLI alerts bubble up as toasts on any page.
+
+```bash
+ghostiam dashboard --port 8080 --api-key demo-key
+# open http://localhost:8080 (pass ?api_key=demo-key or the X-API-Key header)
+```
+
+The CLI pushes alerts, seeds, and journeys to a running dashboard automatically:
+
+```bash
+export GHOSTIAM_DASHBOARD_URL=http://localhost:8080
+export GHOSTIAM_DASHBOARD_KEY=demo-key
+ghostiam simulate --local --username ghost-...        # pushes an alert
+ghostiam seed pastebin --ghost-user ghost-...         # pushes a seed
+ghostiam journey --username ghost-...                 # pushes a journey
+```
+
+Reports are one click away: `/reports/export?format=json` or `format=pdf`. A REST API is exposed at `/api/v1/stats|ghosts|alerts|journeys`.
 
 ### Seeder demo
 
@@ -218,6 +250,20 @@ ghostiam journey --username ghost-prod-db-read-a7f3c2
 ghostiam replay --file attack-journey-2026-08-07.json
 ```
 
+### `ghostiam dashboard`
+
+Serve the GhostIam operations console.
+
+| Flag | Shorthand | Default | Description |
+|------|-----------|---------|-------------|
+| `--port` | `-p` | `8080` | HTTP port to listen on |
+| `--api-key` | | *(env `GHOSTIAM_API_KEY`)* | Shared API key; omit for open access |
+| `--db` | | `ghosts.db` | Path to the SQLite database |
+
+```bash
+ghostiam dashboard --port 8080 --api-key demo-key
+```
+
 ## Decoy Policies
 
 Each ghost user carries one of five decoy policies. They look valuable, but grant only read-only permissions.
@@ -281,10 +327,10 @@ With `--journey`, the enhanced alert adds the Mermaid attack graph, MITRE ATT&CK
 - [x] Ghost token seeder (GitHub, S3, Pastebin)
 - [x] Cross-platform ghost mesh (AWS + GitHub + Okta)
 - [x] Attacker journey replay + MITRE ATT&CK mapping
+- [x] Web dashboard (live alerts, journeys, mesh, seeds, reports)
 - [ ] Multi-cloud support (Azure, GCP)
 - [ ] Okta real-org provisioning
 - [ ] Security Hub integration
-- [ ] Web dashboard
 
 ## Contributing
 

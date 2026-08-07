@@ -1,0 +1,26 @@
+{{define "content"}}
+<div class="space-y-6">
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-extrabold tracking-tight text-white">Ghost Mesh</h1>
+      <p class="text-sm text-slate-400 mt-0.5">One correlated persona, many platform identities — AWS, GitHub, Okta.</p>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-slate-400">
+      {{if .SyncNote}}<span class="card px-3 py-1.5"><span class="text-emerald-300 font-semibold">synced</span> {{.SyncNote}}</span>{{end}}
+      <form method="post" action="/mesh/sync">
+        <button class="btn btn-ghost">{{template "icon-refresh"}}<span>Re-sync</span></button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card p-4 flex items-start gap-3 text-sm text-slate-400 bg-sky-500/5 border-sky-500/20">
+    {{template "icon-terminal"}}
+    <div>
+      Deploy a mesh from the CLI and every platform leg lands here:
+      <code class="font-mono text-emerald-300">ghostiam mesh deploy --count 2 --platforms all</code>
+    </div>
+  </div>
+
+  {{template "meshGrid" .MeshGroups}}
+</div>
+{{end}}

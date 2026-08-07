@@ -1,0 +1,67 @@
+{{define "content"}}
+{{with .Journey}}
+<div class="space-y-6">
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <a href="/journeys" class="text-xs text-sky-300 hover:underline">← all journeys</a>
+      <h1 class="text-2xl font-extrabold tracking-tight text-white mt-1 flex items-center gap-3">
+        <code class="text-rose-200">{{.GhostUsername}}</code>
+        <span class="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30">{{riskLabel .RiskScore}}</span>
+      </h1>
+      <p class="text-sm text-slate-400 mt-1">
+        Captured <span class="text-slate-300">{{formatTime .CreatedAt}}</span>
+        <span class="text-slate-600">·</span> {{printf "%.1f" .DurationSeconds}}s duration
+        <span class="text-slate-600">·</span> risk <span class="text-amber-300 font-semibold">{{.RiskScore}}/10</span>
+      </p>
+    </div>
+    <a href="/journeys/{{.ID}}/mermaid" target="_blank" class="btn btn-ghost">{{template "icon-download"}}<span>Mermaid source</span></a>
+  </div>
+
+  {{if $.MitreTactics}}
+  <div class="card p-4 flex flex-wrap items-center gap-2">
+    <span class="text-xs uppercase tracking-widest font-bold text-slate-500">MITRE tactics</span>
+    {{range $.MitreTactics}}
+    <span class="px-2.5 py-1 rounded-full text-xs font-mono bg-violet-500/10 text-violet-300 border border-violet-500/30">{{.}}</span>
+    {{end}}
+  </div>
+  {{end}}
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card p-5">
+      <h2 class="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">{{template "icon-activity"}} Kill-chain steps</h2>
+      <ol class="relative space-y-0">
+        {{range $.JourneySteps}}
+        <li class="relative pl-8 pb-6 border-l border-slate-800 last:border-0">
+          <span class="absolute -left-2.5 top-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold {{if or (eq .Severity "critical") (eq .Severity "high")}}bg-rose-500/20 text-rose-300 border border-rose-500/40{{else}}bg-slate-800 text-slate-400 border border-slate-700{{end}}">{{.Index}}</span>
+          <div class="flex flex-wrap items-center gap-2">
+            <code class="font-mono text-sm font-semibold text-slate-100">{{.Service}}</code>
+            <code class="font-mono text-xs px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">{{.Action}}</code>
+            {{template "severityBadge" .Severity}}
+          </div>
+          <p class="text-xs text-slate-500 mt-1.5">
+            {{if .SourceIP}}source <span class="font-mono text-slate-400">{{.SourceIP}}</span> <span class="text-slate-600">·</span>{{end}}
+            <span class="font-mono">{{.Technique}}</span>
+            <span class="text-slate-600">·</span> {{formatTime .Timestamp}}
+          </p>
+        </li>
+        {{else}}
+        <li class="text-sm text-slate-500">No steps recorded.</li>
+        {{end}}
+      </ol>
+    </div>
+
+    <div class="card p-5">
+      <h2 class="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">{{template "icon-map"}} Flow diagram</h2>
+      <pre class="text-[11px] font-mono text-slate-300 leading-relaxed overflow-x-auto bg-slate-950/60 border border-slate-800 rounded-lg p-4 whitespace-pre-wrap">{{trim .MermaidDiagram}}</pre>
+      <p class="text-[11px] text-slate-500 mt-3">Rendered by the CLI via Mermaid. Paste the source into
+        <a class="text-sky-300 hover:underline" href="https://mermaid.live" target="_blank" rel="noopener">mermaid.live</a> for a graph view.</p>
+    </div>
+  </div>
+</div>
+{{else}}
+<div class="card p-10 text-center text-slate-400 border-dashed border border-slate-700">
+  <p class="font-semibold text-slate-300">Journey not found</p>
+  <a href="/journeys" class="text-sky-300 hover:underline text-sm mt-1 inline-block">back to journeys</a>
+</div>
+{{end}}
+{{end}}
