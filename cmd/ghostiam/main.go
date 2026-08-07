@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/kakashi-kx/ghostiam/pkg/deploy"
+	"github.com/kakashi-kx/ghostiam/pkg/seeder"
 	"github.com/kakashi-kx/ghostiam/pkg/store"
 	"github.com/kakashi-kx/ghostiam/pkg/templates"
 	"github.com/slack-go/slack"
@@ -96,6 +97,45 @@ var cleanCmd = &cobra.Command{
 	RunE: runClean,
 }
 
+var seedCmd = &cobra.Command{
+	Use:   "seed [github|s3|pastebin|all]",
+	Short: "Leak ghost access keys to realistic bait locations",
+	Long: `Automatically "leak" ghost access keys to realistic bait locations so an
+attacker who stumbles on them triggers detection:
+
+  seed github     create a private repo, commit the keys, flip it public
+  seed s3         public S3 bucket with config.json + backup.sql
+  seed pastebin   local Pastebin-style leak (pastebin-sim.html)
+  seed all        try every platform
+
+Platforms that need credentials skip gracefully when the credential is missing.`,
+	RunE: runSeedCmd,
+}
+
+var seedGithubCmd = &cobra.Command{
+	Use:   "github",
+	Short: "Seed ghost keys into a public GitHub repo",
+	RunE:  runSeedGithub,
+}
+
+var seedS3Cmd = &cobra.Command{
+	Use:   "s3",
+	Short: "Seed ghost keys into a public S3 bucket",
+	RunE:  runSeedS3,
+}
+
+var seedPastebinCmd = &cobra.Command{
+	Use:   "pastebin",
+	Short: "Seed ghost keys into a local Pastebin-style leak",
+	RunE:  runSeedPastebin,
+}
+
+var seedAllCmd = &cobra.Command{
+	Use:   "all",
+	Short: "Seed ghost keys to every platform",
+	RunE:  runSeedAll,
+}
+
 func init() {
 	deployCmd.Flags().IntP("count", "c", 10, "Number of ghost users to create")
 	deployCmd.Flags().StringP("prefix", "p", "prod", "Name prefix for ghost users (e.g. ghost-prod-...)")
@@ -113,7 +153,21 @@ func init() {
 	cleanCmd.Flags().Bool("local", false, "Delete ghosts.json")
 	cleanCmd.Flags().Bool("all", false, "Delete all ghost IAM users from AWS (asks first)")
 
-	rootCmd.AddCommand(deployCmd, simulateCmd, statusCmd, cleanCmd)
+	addGhostUserFlag(seedCmd)
+	seedCmd.Flags().String("platform", "all", "Platform to seed: github, s3, pastebin, or all")
+	addGhostUserFlag(seedGithubCmd)
+	addGhostUserFlag(seedS3Cmd)
+	addGhostUserFlag(seedPastebinCmd)
+	addGhostUserFlag(seedAllCmd)
+	seedCmd.AddCommand(seedGithubCmd, seedS3Cmd, seedPastebinCmd, seedAllCmd)
+
+	rootCmd.AddCommand(deployCmd, simulateCmd, statusCmd, cleanCmd, seedCmd)
+}
+
+// addGhostUserFlag registers the --ghost-user flag used by the seed subcommands.
+func addGhostUserFlag(cmd *cobra.Command) {
+	cmd.Flags().StringP("ghost-user", "u", "", "Ghost username whose access keys to seed")
+	_ = cmd.MarkFlagRequired("ghost-user")
 }
 
 // ---------------------------------------------------------------------------
@@ -128,13 +182,13 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	local, _ := cmd.Flags().GetBool("local")
 
 	if local {
-		return deployLocal(count, prefix)
+		return deployLocal(count, prefix, withKeys)
 	}
 	return deployAWS(count, prefix, region, withKeys)
 }
 
 // deployLocal writes ghost users to the local JSON store. Never touches AWS.
-func deployLocal(count int, prefix string) error {
+func deployLocal(count int, prefix string, withKeys bool) error {
 	policies := templates.GetDecoyPolicies()
 	if len(policies) == 0 {
 		return fmt.Errorf("no decoy policies registered")
@@ -155,10 +209,22 @@ func deployLocal(count int, prefix string) error {
 			PolicyName: policy.Name,
 			CreatedAt:  now,
 		}
+
+		keyNote := ""
+		if withKeys {
+			akid, secret, err := deploy.GenerateKeys()
+			if err != nil {
+				return fmt.Errorf("generate keys for %s: %w", username, err)
+			}
+			record.AccessKeyID = akid
+			record.SecretAccessKey = secret
+			keyNote = " (keys generated)"
+		}
+
 		if err := s.AddGhost(record); err != nil {
 			return fmt.Errorf("add ghost %s: %w", username, err)
 		}
-		fmt.Printf("[%d] Created: %s (policy: %s)\n", i+1, username, policy.Name)
+		fmt.Printf("[%d] Created: %s (policy: %s)%s\n", i+1, username, policy.Name, keyNote)
 	}
 
 	abs, err := filepath.Abs(localStoreFile)
@@ -296,6 +362,106 @@ func sendLocalAlert(username, policyName, webhookURL string) error {
 	}
 
 	return slack.PostWebhook(webhookURL, msg)
+}
+
+// ---------------------------------------------------------------------------
+// seed
+// ---------------------------------------------------------------------------
+
+func runSeedCmd(cmd *cobra.Command, _ []string) error {
+	platform, _ := cmd.Flags().GetString("platform")
+	ghostUser, _ := cmd.Flags().GetString("ghost-user")
+	return runSeed(platform, ghostUser)
+}
+
+func runSeedGithub(cmd *cobra.Command, _ []string) error {
+	ghostUser, _ := cmd.Flags().GetString("ghost-user")
+	return runSeed("github", ghostUser)
+}
+
+func runSeedS3(cmd *cobra.Command, _ []string) error {
+	ghostUser, _ := cmd.Flags().GetString("ghost-user")
+	return runSeed("s3", ghostUser)
+}
+
+func runSeedPastebin(cmd *cobra.Command, _ []string) error {
+	ghostUser, _ := cmd.Flags().GetString("ghost-user")
+	return runSeed("pastebin", ghostUser)
+}
+
+func runSeedAll(cmd *cobra.Command, _ []string) error {
+	ghostUser, _ := cmd.Flags().GetString("ghost-user")
+	return runSeed("all", ghostUser)
+}
+
+// runSeed loads the ghost user's keys and plants them as bait on the requested
+// platforms. Every platform is tried independently; a missing credential on one
+// platform does not stop the others.
+func runSeed(platform, ghostUser string) error {
+	s := store.NewLocalStore(localStoreFile)
+	ghost, err := s.FindGhost(ghostUser)
+	if err != nil {
+		return fmt.Errorf("ghost user '%s' not found in ghosts.json\n  Deploy first: ghostiam deploy --local --count 1 --with-keys --prefix seed-test", ghostUser)
+	}
+	if ghost.AccessKeyID == "" || ghost.SecretAccessKey == "" {
+		return fmt.Errorf("ghost user '%s' has no access keys\n  Redeploy with keys: ghostiam deploy --local --count 1 --with-keys", ghostUser)
+	}
+
+	req := seeder.SeedRequest{
+		GhostUsername:   ghost.Username,
+		AccessKeyID:     ghost.AccessKeyID,
+		SecretAccessKey: ghost.SecretAccessKey,
+	}
+
+	fmt.Printf("\n👻 Seeding ghost keys for %s\n", ghost.Username)
+	fmt.Println()
+
+	ok := 0
+	failures := 0
+	seeders := seedersForPlatform(platform)
+	for _, p := range seeders {
+		if err := seedToPlatform(p, req); err != nil {
+			failures++
+			continue
+		}
+		ok++
+	}
+
+	fmt.Println()
+	if failures > 0 {
+		fmt.Printf("⚠️  %d platform(s) failed, %d succeeded. Check the errors above.\n", failures, ok)
+	}
+	fmt.Printf("✅ Seeded %d bait location(s). Any attacker who uses these keys triggers an alert.\n", ok)
+	return nil
+}
+
+// seedersForPlatform resolves a platform string to the seeders to run.
+func seedersForPlatform(platform string) []seeder.Seeder {
+	switch platform {
+	case "github":
+		return []seeder.Seeder{seeder.NewGitHubSeeder(os.Getenv("GITHUB_TOKEN"))}
+	case "s3":
+		return []seeder.Seeder{seeder.NewS3Seeder("us-east-1")}
+	case "pastebin":
+		return []seeder.Seeder{seeder.NewPastebinSeeder(".")}
+	default:
+		return []seeder.Seeder{
+			seeder.NewGitHubSeeder(os.Getenv("GITHUB_TOKEN")),
+			seeder.NewS3Seeder("us-east-1"),
+			seeder.NewPastebinSeeder("."),
+		}
+	}
+}
+
+func seedToPlatform(p seeder.Seeder, req seeder.SeedRequest) error {
+	fmt.Printf("[seed] %s ...\n", p.Name())
+	payload, err := p.Seed(context.Background(), req)
+	if err != nil {
+		fmt.Printf("  ❌ %s seed failed: %v\n", p.Name(), err)
+		return err
+	}
+	fmt.Printf("  ✅ %s -> %s\n", payload.BaitFileName, payload.Location)
+	return nil
 }
 
 // ---------------------------------------------------------------------------

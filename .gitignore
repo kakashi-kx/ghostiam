@@ -4,6 +4,9 @@
 # Local ghost store (created by --local mode)
 ghosts.json
 
+# Pastebin-style leak simulator output
+/pastebin-sim.html
+
 # Terraform
 /terraform/.terraform/
 /terraform/*.tfstate
