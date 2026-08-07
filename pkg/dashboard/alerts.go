@@ -36,6 +36,22 @@ func (s *DashboardServer) handleAlertsPartial(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// broadcastAlert fans an alert out to every connected SSE client. The client
+// buffer is bounded, so a slow client is skipped rather than blocking.
+func (s *DashboardServer) broadcastAlert(a Alert) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	msg := SSEMessage{Type: "alert", Payload: a}
+	for _, ch := range s.sseClients {
+		select {
+		case ch <- msg:
+		default:
+			// client buffer full, skip
+		}
+	}
+}
+
 // handleAlertSimulate creates a demo alert and broadcasts it over SSE so the
 // live feed and toasts can be demonstrated without the CLI.
 func (s *DashboardServer) handleAlertSimulate(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +84,7 @@ func (s *DashboardServer) handleAlertSimulate(w http.ResponseWriter, r *http.Req
 	alert.ID = id
 	_ = s.db.MarkGhostTriggered(username)
 
-	s.Publish(SSEMessage{Type: "alert", Payload: alert})
+	s.broadcastAlert(alert)
 
 	http.Redirect(w, r, "/alerts", http.StatusSeeOther)
 }

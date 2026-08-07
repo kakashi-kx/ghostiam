@@ -73,6 +73,46 @@ func runDashboard(cmd *cobra.Command, _ []string) error {
 	return srv.Start()
 }
 
+// pushAlertToDashboard posts an alert to the dashboard's internal API, if
+// configured. Best-effort: a missing or unreachable dashboard is not an error.
+func pushAlertToDashboard(username, policyName string) {
+	dashboardURL := os.Getenv("GHOSTIAM_DASHBOARD_URL")
+	if dashboardURL == "" {
+		return
+	}
+	dashboardKey := os.Getenv("GHOSTIAM_DASHBOARD_KEY")
+
+	payload := map[string]any{
+		"ghost_username": username,
+		"platform":       "local",
+		"action":         "simulated",
+		"source_ip":      "127.0.0.1",
+		"severity":       "critical",
+		"risk_score":     8,
+		"raw_event":      fmt.Sprintf(`{"username":%q,"policy":%q,"source":"local"}`, username, policyName),
+	}
+
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPost, dashboardURL+"/api/v1/alerts", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if dashboardKey != "" {
+		req.Header.Set("X-API-Key", dashboardKey)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return // silently fail — dashboard is optional
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		fmt.Printf("   ⚠️  dashboard alert rejected: %s\n", resp.Status)
+	}
+}
+
 // postDashboardEvent pushes an event to the dashboard API, if configured. It is
 // best-effort: a missing or unreachable dashboard is not an error.
 func postDashboardEvent(ev dashboard.EventIngest) {

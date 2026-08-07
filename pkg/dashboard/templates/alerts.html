@@ -12,15 +12,15 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div class="lg:col-span-2">
-      <div hx-get="/partials/alerts" hx-trigger="every 10s" hx-swap="outerHTML">
+      <div hx-get="/partials/alerts" hx-trigger="every 10s" hx-swap="innerHTML">
         {{template "alertList" .Alerts}}
       </div>
     </div>
     <div class="space-y-6">
       <div class="card p-5">
         <h2 class="text-sm font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2 mb-4">{{template "icon-zap"}} Simulate alert</h2>
-        <form method="post" action="/alerts/simulate" class="space-y-3">
-          <input name="username" value="{{.DemoGhostUser}}" placeholder="ghost username" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50">
+        <form hx-post="/api/v1/alerts/simulate" hx-swap="none" class="space-y-3">
+          <input name="username" value="{{.DemoGhostUser}}" placeholder="ghost username (blank = random)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50">
           <input name="action" value="iam:PassRole" placeholder="action (e.g. s3:ListBuckets)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50">
           <button class="btn btn-primary w-full justify-center">{{template "icon-zap"}}<span>Trigger</span></button>
         </form>

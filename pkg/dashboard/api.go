@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"encoding/json"
+	"math/rand"
 	"net/http"
 	"time"
 )
@@ -76,6 +77,82 @@ func (s *DashboardServer) handleAPIJourneys(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"journeys": journeys})
+}
+
+// handleCreateAlert accepts a single alert pushed by the CLI, persists it,
+// marks the ghost triggered, and broadcasts it over SSE.
+func (s *DashboardServer) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
+	var a Alert
+	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid payload"})
+		return
+	}
+	if a.Severity == "" {
+		a.Severity = "critical"
+	}
+	if a.CreatedAt == "" {
+		a.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	id, err := s.db.InsertAlert(a)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	a.ID = id
+	_ = s.db.MarkGhostTriggered(a.GhostUsername)
+	s.broadcastAlert(a)
+	writeJSON(w, http.StatusCreated, map[string]any{"status": "ok", "alert_id": id})
+}
+
+// handleAPISimulateAlert creates a demo alert for a random active ghost (or the
+// username in the form body) and broadcasts it — used by the HTMX Simulate
+// button so the live feed can be demonstrated without the CLI.
+func (s *DashboardServer) handleAPISimulateAlert(w http.ResponseWriter, r *http.Request) {
+	username := r.FormValue("username")
+	action := r.FormValue("action")
+
+	if username == "" {
+		ghosts, err := s.db.ListGhosts()
+		if err == nil {
+			var active []string
+			for _, g := range ghosts {
+				if g.Status == "active" {
+					active = append(active, g.Username)
+				}
+			}
+			if len(active) > 0 {
+				username = active[rand.Intn(len(active))]
+			}
+		}
+	}
+	if username == "" {
+		username = "ghost-demo-db-read-a7f3c2"
+	}
+	if action == "" {
+		action = "iam:PassRole"
+	}
+
+	a := Alert{
+		GhostUsername: username,
+		Platform:      "local",
+		SourceIP:      "185.220.101.23",
+		UserAgent:     "aws-cli/2.15.0 Python/3.11",
+		Action:        action,
+		Region:        "us-east-1",
+		Severity:      "critical",
+		RiskScore:     9,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+	}
+
+	id, err := s.db.InsertAlert(a)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	a.ID = id
+	_ = s.db.MarkGhostTriggered(username)
+	s.broadcastAlert(a)
+	writeJSON(w, http.StatusCreated, map[string]any{"status": "ok", "alert_id": id, "ghost_username": username})
 }
 
 // handleAPIEvents ingests alerts, journeys, and seeds pushed by the CLI,

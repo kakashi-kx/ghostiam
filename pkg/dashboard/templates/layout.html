@@ -55,24 +55,24 @@
         </div>
       </a>
       <div class="hidden md:flex items-center gap-1">
-        <a href="/" class="nav-link {{if eq .ActiveNav "dashboard"}}active{{end}}">{{template "icon-dashboard"}}<span>Dashboard</span></a>
-        <a href="/ghosts" class="nav-link {{if eq .ActiveNav "ghosts"}}active{{end}}">{{template "icon-users"}}<span>Ghosts</span></a>
-        <a href="/alerts" class="nav-link {{if eq .ActiveNav "alerts"}}active{{end}}">{{template "icon-bell"}}<span>Alerts</span></a>
-        <a href="/journeys" class="nav-link {{if eq .ActiveNav "journeys"}}active{{end}}">{{template "icon-map"}}<span>Journeys</span></a>
-        <a href="/mesh" class="nav-link {{if eq .ActiveNav "mesh"}}active{{end}}">{{template "icon-globe"}}<span>Mesh</span></a>
-        <a href="/seeds" class="nav-link {{if eq .ActiveNav "seeds"}}active{{end}}">{{template "icon-anchor"}}<span>Seeds</span></a>
+        <a href="/{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "dashboard"}}active{{end}}">{{template "icon-dashboard"}}<span>Dashboard</span></a>
+        <a href="/ghosts{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "ghosts"}}active{{end}}">{{template "icon-users"}}<span>Ghosts</span></a>
+        <a href="/alerts{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "alerts"}}active{{end}}">{{template "icon-bell"}}<span>Alerts</span></a>
+        <a href="/journeys{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "journeys"}}active{{end}}">{{template "icon-map"}}<span>Journeys</span></a>
+        <a href="/mesh{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "mesh"}}active{{end}}">{{template "icon-globe"}}<span>Mesh</span></a>
+        <a href="/seeds{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "seeds"}}active{{end}}">{{template "icon-anchor"}}<span>Seeds</span></a>
       </div>
       <div class="flex items-center gap-2">
         <span class="live-pill"><span class="dot"></span>LIVE</span>
       </div>
     </div>
     <div class="md:hidden container mx-auto px-4 pb-3 flex gap-1 overflow-x-auto">
-      <a href="/" class="nav-link {{if eq .ActiveNav "dashboard"}}active{{end}}">{{template "icon-dashboard"}}<span>Dashboard</span></a>
-      <a href="/ghosts" class="nav-link {{if eq .ActiveNav "ghosts"}}active{{end}}">{{template "icon-users"}}<span>Ghosts</span></a>
-      <a href="/alerts" class="nav-link {{if eq .ActiveNav "alerts"}}active{{end}}">{{template "icon-bell"}}<span>Alerts</span></a>
-      <a href="/journeys" class="nav-link {{if eq .ActiveNav "journeys"}}active{{end}}">{{template "icon-map"}}<span>Journeys</span></a>
-      <a href="/mesh" class="nav-link {{if eq .ActiveNav "mesh"}}active{{end}}">{{template "icon-globe"}}<span>Mesh</span></a>
-      <a href="/seeds" class="nav-link {{if eq .ActiveNav "seeds"}}active{{end}}">{{template "icon-anchor"}}<span>Seeds</span></a>
+      <a href="/{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "dashboard"}}active{{end}}">{{template "icon-dashboard"}}<span>Dashboard</span></a>
+      <a href="/ghosts{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "ghosts"}}active{{end}}">{{template "icon-users"}}<span>Ghosts</span></a>
+      <a href="/alerts{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "alerts"}}active{{end}}">{{template "icon-bell"}}<span>Alerts</span></a>
+      <a href="/journeys{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "journeys"}}active{{end}}">{{template "icon-map"}}<span>Journeys</span></a>
+      <a href="/mesh{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "mesh"}}active{{end}}">{{template "icon-globe"}}<span>Mesh</span></a>
+      <a href="/seeds{{if .APIKey}}?api_key={{.APIKey}}{{end}}" class="nav-link {{if eq .ActiveNav "seeds"}}active{{end}}">{{template "icon-anchor"}}<span>Seeds</span></a>
     </div>
   </nav>
 

@@ -389,15 +389,7 @@ func runSimulate(cmd *cobra.Command, _ []string) error {
 		if webhookURL == "" {
 			fmt.Printf("   ⚠️  SLACK_WEBHOOK_URL not set. Alert not sent.\n")
 			fmt.Printf("   Set it: export SLACK_WEBHOOK_URL=\"https://hooks.slack.com/services/...\"\n")
-			postDashboardEvent(dashboard.EventIngest{Type: "alert", Alert: &dashboard.Alert{
-				GhostUsername: ghost.Username,
-				Platform:      "local",
-				SourceIP:      "127.0.0.1",
-				Action:        "sts:GetCallerIdentity",
-				Region:        "local",
-				Severity:      "critical",
-				RiskScore:     8,
-			}})
+			pushAlertToDashboard(ghost.Username, ghost.PolicyName)
 			return nil
 		}
 
@@ -408,15 +400,7 @@ func runSimulate(cmd *cobra.Command, _ []string) error {
 
 		fmt.Printf("   ✅ Alert sent to Slack — check your channel\n")
 
-		postDashboardEvent(dashboard.EventIngest{Type: "alert", Alert: &dashboard.Alert{
-			GhostUsername: ghost.Username,
-			Platform:      "local",
-			SourceIP:      "127.0.0.1",
-			Action:        "sts:GetCallerIdentity",
-			Region:        "local",
-			Severity:      "critical",
-			RiskScore:     8,
-		}})
+		pushAlertToDashboard(ghost.Username, ghost.PolicyName)
 		return nil
 	}
 

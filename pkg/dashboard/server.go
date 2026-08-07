@@ -170,32 +170,51 @@ func (s *DashboardServer) buildRouter() {
 
 	r.HandleFunc("/api/v1/stats", auth(s.handleAPIStats)).Methods("GET")
 	r.HandleFunc("/api/v1/ghosts", auth(s.handleAPIGhosts)).Methods("GET")
+	r.HandleFunc("/api/v1/alerts", auth(s.handleCreateAlert)).Methods("POST")
 	r.HandleFunc("/api/v1/alerts", auth(s.handleAPIAlerts)).Methods("GET")
+	r.HandleFunc("/api/v1/alerts/simulate", auth(s.handleAPISimulateAlert)).Methods("POST")
 	r.HandleFunc("/api/v1/journeys", auth(s.handleAPIJourneys)).Methods("GET")
 	r.HandleFunc("/api/v1/events", auth(s.handleAPIEvents)).Methods("POST")
 
 	s.router = r
 }
 
-// requireAPIKey enforces the shared API key via header or query parameter.
+// requireAPIKey enforces the shared API key via cookie, query parameter, or
+// header, in that order. On success it plants a cookie so nav links work.
 func (s *DashboardServer) requireAPIKey(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.apiKey == "" {
 			next(w, r)
 			return
 		}
-		key := r.Header.Get("X-API-Key")
+
+		key := ""
+		if c, err := r.Cookie("ghostiam_key"); err == nil {
+			key = c.Value
+		}
 		if key == "" {
 			key = r.URL.Query().Get("api_key")
 		}
+		if key == "" {
+			key = r.Header.Get("X-API-Key")
+		}
+
 		if key != s.apiKey {
 			if wantsJSON(r) {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			} else {
-				http.Error(w, "Unauthorized — pass ?api_key= or X-API-Key", http.StatusUnauthorized)
+				http.Error(w, "Unauthorized — pass ?api_key=, the ghostiam_key cookie, or X-API-Key", http.StatusUnauthorized)
 			}
 			return
 		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "ghostiam_key",
+			Value:    s.apiKey,
+			Path:     "/",
+			MaxAge:   86400 * 7,
+			SameSite: http.SameSiteLaxMode,
+		})
 		next(w, r)
 	}
 }
@@ -250,10 +269,12 @@ func (s *DashboardServer) handleAlertStream(w http.ResponseWriter, r *http.Reque
 	}()
 
 	// Heartbeat keeps proxies and browsers from dropping the connection.
-	heartbeat := time.NewTicker(20 * time.Second)
+	heartbeat := time.NewTicker(30 * time.Second)
 	defer heartbeat.Stop()
 
-	fmt.Fprintf(w, "retry: 3000\n\n")
+	// Initial "connected" event tells the browser the stream is live.
+	connected, _ := json.Marshal(SSEMessage{Type: "connected", Payload: map[string]string{"status": "ok"}})
+	fmt.Fprintf(w, "retry: 3000\n\nevent: message\ndata: %s\n\n", connected)
 	flusher.Flush()
 
 	for {
