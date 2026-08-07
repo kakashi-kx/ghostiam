@@ -4,6 +4,10 @@
 # Local ghost store (created by --local mode)
 ghosts.json
 
+# Mesh identity stores (created by mesh deploy)
+mesh-identities.json
+okta-ghosts.json
+
 # Pastebin-style leak simulator output
 /pastebin-sim.html
 

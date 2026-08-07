@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/kakashi-kx/ghostiam/pkg/deploy"
+	"github.com/kakashi-kx/ghostiam/pkg/mesh"
 	"github.com/kakashi-kx/ghostiam/pkg/seeder"
 	"github.com/kakashi-kx/ghostiam/pkg/store"
 	"github.com/kakashi-kx/ghostiam/pkg/templates"
@@ -136,6 +137,34 @@ var seedAllCmd = &cobra.Command{
 	RunE:  runSeedAll,
 }
 
+var meshCmd = &cobra.Command{
+	Use:   "mesh",
+	Short: "Deploy correlated ghost identities across AWS, GitHub, and Okta",
+	Long: `Deploy matching ghost identities across AWS IAM + GitHub + Okta so one
+persona exists on every platform.
+
+When a ghost fires on one platform, the alert flags the correlated identities
+on the other platforms — a "mesh" of decoys a real attacker can never fully
+disentangle from real users.`,
+}
+
+var meshDeployCmd = &cobra.Command{
+	Use:   "deploy",
+	Short: "Deploy matching ghost identities across platforms",
+	Long: `Create count correlated ghost identities across the requested platforms.
+
+Platforms without live credentials are simulated locally so the demo always
+works: AWS legs become local ghost records, GitHub profiles get simulated
+URLs, and Okta profiles are written to okta-ghosts.json.`,
+	RunE: runMeshDeploy,
+}
+
+var meshStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show correlated ghost identities across platforms",
+	RunE:  runMeshStatus,
+}
+
 func init() {
 	deployCmd.Flags().IntP("count", "c", 10, "Number of ghost users to create")
 	deployCmd.Flags().StringP("prefix", "p", "prod", "Name prefix for ghost users (e.g. ghost-prod-...)")
@@ -161,7 +190,13 @@ func init() {
 	addGhostUserFlag(seedAllCmd)
 	seedCmd.AddCommand(seedGithubCmd, seedS3Cmd, seedPastebinCmd, seedAllCmd)
 
-	rootCmd.AddCommand(deployCmd, simulateCmd, statusCmd, cleanCmd, seedCmd)
+	meshDeployCmd.Flags().IntP("count", "c", 2, "Number of ghost identities per platform")
+	meshDeployCmd.Flags().StringP("prefix", "p", "demo", "Naming prefix")
+	meshDeployCmd.Flags().String("platforms", "all", "Comma-separated platforms: aws,github,okta,all")
+	meshDeployCmd.Flags().BoolP("local", "l", false, "Force local simulation (no real API calls)")
+	meshCmd.AddCommand(meshDeployCmd, meshStatusCmd)
+
+	rootCmd.AddCommand(deployCmd, simulateCmd, statusCmd, cleanCmd, seedCmd, meshCmd)
 }
 
 // addGhostUserFlag registers the --ghost-user flag used by the seed subcommands.
@@ -462,6 +497,96 @@ func seedToPlatform(p seeder.Seeder, req seeder.SeedRequest) error {
 	}
 	fmt.Printf("  ✅ %s -> %s\n", payload.BaitFileName, payload.Location)
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// mesh
+// ---------------------------------------------------------------------------
+
+func runMeshDeploy(cmd *cobra.Command, _ []string) error {
+	count, _ := cmd.Flags().GetInt("count")
+	prefix, _ := cmd.Flags().GetString("prefix")
+	platforms, _ := cmd.Flags().GetString("platforms")
+	local, _ := cmd.Flags().GetBool("local")
+
+	orch := mesh.NewOrchestrator("mesh-identities.json", "okta-ghosts.json")
+	identities, err := orch.Deploy(context.Background(), mesh.MeshConfig{
+		Count:       count,
+		Prefix:      prefix,
+		Platforms:   strings.Split(platforms, ","),
+		Local:       local,
+		GitHubToken: os.Getenv("GITHUB_TOKEN"),
+		Region:      "us-east-1",
+	})
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("\n👻 Deployed %d correlated ghost identities.\n", len(identities))
+	fmt.Println()
+	for _, id := range identities {
+		fmt.Printf("  - %s\n", id.Username)
+		if id.AWSSuccess {
+			fmt.Printf("      AWS:    ✅ active%s\n", awsArnNote(id.AWSArn))
+		} else {
+			fmt.Printf("      AWS:    ❌\n")
+		}
+		if id.GitHubSuccess {
+			fmt.Printf("      GitHub: ✅ %s\n", id.GitHubHandle)
+		} else {
+			fmt.Printf("      GitHub: ❌\n")
+		}
+		if id.OktaSuccess {
+			fmt.Printf("      Okta:   ✅ %s\n", id.OktaEmail)
+		} else {
+			fmt.Printf("      Okta:   ❌\n")
+		}
+	}
+	fmt.Println()
+	fmt.Println("Run 'ghostiam mesh status' to see the correlated table.")
+	return nil
+}
+
+func runMeshStatus(cmd *cobra.Command, _ []string) error {
+	orch := mesh.NewOrchestrator("mesh-identities.json", "okta-ghosts.json")
+	identities, err := orch.List()
+	if err != nil {
+		return err
+	}
+	if len(identities) == 0 {
+		fmt.Println("No mesh identities found. Deploy first: ghostiam mesh deploy")
+		return nil
+	}
+
+	fmt.Println("👻 Ghost Mesh Status")
+	fmt.Println()
+	fmt.Printf("%-30s %-12s %-20s %s\n", "USERNAME", "AWS", "GITHUB", "OKTA")
+	fmt.Println(strings.Repeat("-", 74))
+	for _, id := range identities {
+		aws := "❌"
+		if id.AWSSuccess {
+			aws = "✅ active"
+		}
+		gh := "❌"
+		if id.GitHubSuccess {
+			gh = "✅ " + id.GitHubHandle
+		}
+		okta := "❌"
+		if id.OktaSuccess {
+			okta = "✅ " + id.OktaEmail
+		}
+		fmt.Printf("%-30s %-12s %-20s %s\n", id.Username, aws, gh, okta)
+	}
+	fmt.Println()
+	fmt.Println("A ghost firing on any platform flags all its correlated identities.")
+	return nil
+}
+
+func awsArnNote(arn string) string {
+	if arn == "" {
+		return " (local)"
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------------

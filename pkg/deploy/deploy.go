@@ -108,6 +108,13 @@ func DeployGhostUsers(ctx context.Context, cfg DeployConfig) ([]GhostUser, error
 	return users, first
 }
 
+// CreateGhostUser creates a single ghost IAM user with an exact username and a
+// decoy policy, optionally provisioning an access key. It is used by the mesh
+// orchestrator to correlate an AWS identity with GitHub/Okta counterparts.
+func CreateGhostUser(ctx context.Context, client *iam.Client, username string, policy templates.PolicyTemplate, withKeys bool) (GhostUser, error) {
+	return createGhostUser(ctx, client, username, policy, withKeys)
+}
+
 // createGhostUser creates a single ghost user, attaches its decoy policy, and
 // optionally provisions an access key.
 func createGhostUser(ctx context.Context, client *iam.Client, username string, policy templates.PolicyTemplate, withKeys bool) (GhostUser, error) {
