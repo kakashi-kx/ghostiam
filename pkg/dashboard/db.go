@@ -411,9 +411,10 @@ func (d *DB) RiskDistribution() (map[string]int, error) {
 	return out, rows.Err()
 }
 
-// AlertsByHour returns alert counts per hour (UTC) over the last 24h.
+// AlertsByHour returns alert counts per hour (UTC) over the last 24h, padded so
+// every hour 00..23 appears (charts need a continuous window).
 func (d *DB) AlertsByHour() ([]HourCount, error) {
-	rows, err := d.Query(`SELECT strftime('%H', created_at) AS h, COUNT(*) FROM alerts
+	rows, err := d.Query(`SELECT CAST(strftime('%H', created_at) AS INTEGER) AS h, COUNT(*) FROM alerts
 		WHERE created_at >= datetime('now', '-24 hours')
 		GROUP BY h ORDER BY h`)
 	if err != nil {
@@ -421,15 +422,23 @@ func (d *DB) AlertsByHour() ([]HourCount, error) {
 	}
 	defer rows.Close()
 
-	out := []HourCount{}
+	counts := map[int]int{}
 	for rows.Next() {
-		var hc HourCount
-		if err := rows.Scan(&hc.Hour, &hc.Count); err != nil {
+		var h, n int
+		if err := rows.Scan(&h, &n); err != nil {
 			return nil, err
 		}
-		out = append(out, hc)
+		counts[h] = n
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]HourCount, 0, 24)
+	for h := 0; h < 24; h++ {
+		out = append(out, HourCount{Hour: fmt.Sprintf("%02d", h), Count: counts[h]})
+	}
+	return out, nil
 }
 
 // ---------------------------------------------------------------------------

@@ -72,8 +72,11 @@
   Chart.defaults.font.family = 'ui-monospace, Menlo, monospace';
 
   const grid = { color: 'rgba(148,163,184,0.06)' };
-  const severityColors = { critical: '#f43f5e', high: '#f97316', medium: '#f59e0b', low: '#38bdf8', info: '#38bdf8' };
+  const severityColors = { critical: '#f43f5e', high: '#f97316', medium: '#f59e0b', low: '#38bdf8', info: '#34d399' };
   const severityOrder = ['critical', 'high', 'medium', 'low', 'info'];
+
+  const apiKey = {{.APIKey}} ? encodeURIComponent({{.APIKey}}) : '';
+  const statsURL = '/api/v1/stats' + (apiKey ? '?api_key=' + apiKey : '');
 
   let byHourChart, severityChart, actionsChart;
 
@@ -119,10 +122,17 @@
 
   async function loadCharts() {
     try {
-      const res = await fetch('/api/v1/stats');
-      if (!res.ok) return;
-      renderCharts(await res.json());
-    } catch (_) { /* stats are best-effort */ }
+      const res = await fetch(statsURL);
+      if (!res.ok) {
+        console.error('[ghostiam] stats fetch failed:', res.status, res.statusText);
+        return;
+      }
+      const data = await res.json();
+      console.log('[ghostiam] stats loaded:', data);
+      renderCharts(data);
+    } catch (err) {
+      console.error('[ghostiam] stats error:', err);
+    }
   }
 
   byHourChart = new Chart(document.getElementById('byHourChart'), {
