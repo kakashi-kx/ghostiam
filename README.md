@@ -11,7 +11,7 @@ GhostIam deploys decoy IAM identities across your AWS account that look like pri
 [![Security Policy](https://img.shields.io/badge/security-policy-blue.svg)](SECURITY.md)
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="GhostIam operations dashboard" width="90%">
+  <img src="docs/screenshots/Screenshot 2026-08-07 202944.png" alt="GhostIam operations dashboard" width="90%">
 </p>
 
 ---
