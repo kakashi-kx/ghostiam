@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -151,7 +152,7 @@ func (s *DashboardServer) buildRouter() {
 	r.HandleFunc("/ghosts/{username}/delete", auth(s.handleGhostDelete)).Methods("POST")
 
 	r.HandleFunc("/alerts", auth(s.handleAlerts)).Methods("GET")
-	r.HandleFunc("/alerts/stream", s.handleAlertStream).Methods("GET")
+	r.HandleFunc("/alerts/stream", auth(s.handleAlertStream)).Methods("GET")
 	r.HandleFunc("/alerts/simulate", auth(s.handleAlertSimulate)).Methods("POST")
 
 	r.HandleFunc("/journeys", auth(s.handleJourneys)).Methods("GET")
@@ -200,7 +201,7 @@ func (s *DashboardServer) requireAPIKey(next http.HandlerFunc) http.HandlerFunc 
 			key = r.Header.Get("X-API-Key")
 		}
 
-		if key != s.apiKey {
+		if subtle.ConstantTimeCompare([]byte(key), []byte(s.apiKey)) != 1 {
 			if wantsJSON(r) {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			} else {
