@@ -78,59 +78,185 @@ make deploy-lambda                                   # Terraform: Lambda + Event
 
 > CloudTrail must be enabled — it's on by default in every AWS account, so this typically works with zero extra setup.
 
+
 ## Architecture
 
-```
-                      ┌────────────────────────────────────────────────────┐
-                      │                    AWS Account                     │
-                      │                                                    │
-  ┌──────────┐        │   ┌──────────────────────────────────────────┐    │
-  │  CLI     │  cre─   │   │  IAM Ghost Users                          │    │
-  │ ghostiam │  ates   │   │  ghost-prod-db-read-a7f3                  │    │
-  │ deploy   ├───────▶│   │  ghost-prod-infra-view-c2b8   (idle...)   │    │
-  └──────────┘        │   │  tag: GhostIam=true                       │    │
-                      │   └──────────────────────────────────────────┘    │
-                      │                    ▲                              │
-                      │            attacker tries to use one              │
-                      │                    │                              │
-                      │   ┌────────────────┴─────────────────────────┐   │
-                      │   │  CloudTrail captures the API call        │   │
-                      │   └──────────────────────────────────────────┘   │
-                      │                    │                              │
-                      │   ┌────────────────┴─────────────────────────┐   │
-                      │   │  EventBridge rule filters ghost activity │   │
-                      │   └──────────────────────────────────────────┘   │
-                      │                    │                              │
-                      │   ┌────────────────┴─────────────────────────┐   │
-                      │   │  Lambda (ghostiam-detector)              │   │
-                      │   │  parses event, builds Block Kit message  │   │
-                      │   └──────────────────────────────────────────┘   │
-                      └────────────────────┬─────────────────────────────┘
-                                           │
-                                           ▼
-                               ┌───────────────────────┐
-                               │  Slack alert (seconds)│
-                               │  :ghost: GHOST USER   │
-                               └───────────────────────┘
+### Detection Flow — AWS Mode
+
+```mermaid
+flowchart TD
+    CLI["🔧 CLI<br/>ghostiam deploy"] -->|creates| IAM["👻 IAM Ghost Users<br/>ghost-prod-db-read-a7f3<br/>ghost-admin-backup-c2b8<br/>Tag: GhostIam=true"]
+    IAM -->|idle, waiting| IDLE["⏳ Ghosts sit dormant<br/>Zero cost, zero noise"]
+    ATK["🕵️ Attacker finds<br/>and uses ghost creds"] -->|triggers| CT["AWS CloudTrail<br/>Captures API call"]
+    CT --> EB["Amazon EventBridge<br/>Filters: GhostIam=true"]
+    EB --> LAMBDA["⚡ AWS Lambda<br/>Go runtime, 128MB<br/>Parses + enriches event"]
+    LAMBDA --> SLACK["🟢 Slack Alert<br/>👻 GHOST USER ACTIVATED<br/>< 2 seconds"]
+    LAMBDA --> DASH["📊 Dashboard<br/>SSE real-time feed<br/>+ journey graph"]
+    DASH --> SSE["🔄 Live updates<br/>no page refresh"]
+    
+    style CLI fill:#22c55e,stroke:#166534,color:#fff
+    style IAM fill:#3b82f6,stroke:#1e40af,color:#fff
+    style ATK fill:#ef4444,stroke:#991b1b,color:#fff
+    style LAMBDA fill:#f59e0b,stroke:#92400e,color:#fff
+    style SLACK fill:#8b5cf6,stroke:#5b21b6,color:#fff
+    style DASH fill:#06b6d4,stroke:#155e75,color:#fff
 ```
 
-### Ghost Mesh — one persona, multiple platforms
+### Attack Journey — Kill Chain Visualization
 
+```mermaid
+flowchart LR
+    subgraph RECON["🔍 RECONNAISSANCE"]
+        S1["sts:GetCallerIdentity<br/>Who am I?"]
+    end
+    
+    subgraph DISCOVERY["📋 DISCOVERY"]
+        S2["iam:ListRoles<br/>What can I access?"]
+        S3["s3:ListBuckets<br/>Where's the data?"]
+    end
+    
+    subgraph ACCESS["📥 DATA ACCESS"]
+        S4["s3:GetObject<br/>Exfiltrate data"]
+    end
+    
+    subgraph PERSIST["🔑 PERSISTENCE"]
+        S5["iam:CreateAccessKey<br/>Plant backdoor"]
+    end
+    
+    S1 -->|"T1087.004"| S2
+    S2 -->|"T1069.002"| S3
+    S3 -->|"T1526"| S4
+    S4 -->|"T1530"| S5
+    
+    S5 -.->|"🚨 GHOST TRIGGERED<br/>Risk: 10/10 CRITICAL"| ALERT["🟢 Slack + 📊 Dashboard"]
+    
+    style RECON fill:#f9f9ff,stroke:#6366f1,color:#1e1b4b
+    style DISCOVERY fill:#fef3c7,stroke:#d97706,color:#78350f
+    style ACCESS fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    style PERSIST fill:#fce7f3,stroke:#db2777,color:#831843
+    style ALERT fill:#ef4444,stroke:#991b1b,color:#fff
 ```
-        ┌────────────────────────────  GHOST MESH  ────────────────────────────┐
-        │        ghost-prod-admin-a7f3 (one persona, three platforms)          │
-        │   ┌─────────────┐     ┌──────────────┐     ┌──────────────────┐      │
-        │   │   AWS IAM   │     │    GitHub    │     │      Okta        │      │
-        │   │ ghost user  │     │  contractor  │     │   fake profile   │      │
-        │   │ (decoy pol) │     │    profile   │     │ (okta-ghosts)    │      │
-        │   └─────┬───────┘     └──────┬───────┘     └────────┬─────────┘      │
-        │         └──────────────┬─────┴──────────────────────┘                │
-        │                        │ correlated by username                      │
-        │                   ┌────┴─────┐                                        │
-        │                   │  Alert   │  "This ghost exists on 3 platforms"   │
-        │                   └──────────┘                                        │
-        └────────────────────────────────────────────────────────────────────┘
+
+### Cross-Platform Ghost Mesh
+
+```mermaid
+flowchart TD
+    PERSONA["👤 ghost-prod-admin-a7f3<br/>One persona, three platforms"]
+    
+    PERSONA --> AWS["🔶 AWS IAM<br/>ghost user + decoy policy"]
+    PERSONA --> GH["🐙 GitHub<br/>contractor profile<br/>alex-ghost-dev"]
+    PERSONA --> OKTA["🔐 Okta<br/>fake employee<br/>alex.johnson@fake.com"]
+    
+    AWS --> CORR{"💥 Any platform<br/>gets triggered"}
+    GH --> CORR
+    OKTA --> CORR
+    
+    CORR --> ALERT["🚨 CORRELATED ALERT<br/><br/>'ghost-prod-admin-a7f3<br/>fired on AWS.<br/>Also exists on GitHub + Okta.<br/>Check all 3 platforms.'"]
+    
+    ALERT --> SLACK2["🟢 Slack"]
+    ALERT --> DASH2["📊 Dashboard"]
+    
+    style PERSONA fill:#8b5cf6,stroke:#5b21b6,color:#fff
+    style AWS fill:#f97316,stroke:#9a3412,color:#fff
+    style GH fill:#333,stroke:#666,color:#fff
+    style OKTA fill:#06b6d4,stroke:#155e75,color:#fff
+    style CORR fill:#f59e0b,stroke:#92400e,color:#fff
+    style ALERT fill:#ef4444,stroke:#991b1b,color:#fff
 ```
+
+### Local Mode — Zero AWS Dependencies
+
+```mermaid
+flowchart TD
+    DEPLOY["🔧 ghostiam deploy --local"] -->|"writes"| JSON["📄 ghosts.json<br/>local JSON store"]
+    SIM["🔧 ghostiam simulate --local<br/>--username ghost-xxx --journey"] -->|"reads"| JSON
+    SIM -->|"HTTP POST"| DASHBOARD["📊 Dashboard<br/>localhost:8080"]
+    SIM -->|"webhook"| SLACK3["🟢 Slack Alert"]
+    
+    DASHBOARD -->|"SSE stream"| BROWSER["🌐 Browser<br/>real-time updates"]
+    DASHBOARD -->|"SQLite"| DB["🗄️ ghosts.db<br/>persistent storage"]
+    
+    DASHBOARD -->|"renders"| CHARTS["📈 Charts<br/>• Alert Severity (donut)<br/>• Top Actions (bar)<br/>• Traffic 24h (line)"]
+    
+    DASHBOARD -->|"renders"| JOURNEY["🗺️ Journey Viewer<br/>• Mermaid graph<br/>• MITRE ATT&CK mapping<br/>• Kill-chain timeline"]
+    
+    style DEPLOY fill:#22c55e,stroke:#166534,color:#fff
+    style JSON fill:#a855f7,stroke:#6b21a8,color:#fff
+    style DASHBOARD fill:#06b6d4,stroke:#155e75,color:#fff
+    style SLACK3 fill:#8b5cf6,stroke:#5b21b6,color:#fff
+    style BROWSER fill:#3b82f6,stroke:#1e40af,color:#fff
+    style CHARTS fill:#f59e0b,stroke:#92400e,color:#fff
+    style JOURNEY fill:#ec4899,stroke:#be185d,color:#fff
+```
+
+### Token Seeder — Bait Distribution
+
+```mermaid
+flowchart LR
+    KEYS["🔑 Ghost Access Keys<br/>generated with --with-keys"] --> SEEDER["🎣 Token Seeder<br/>ghostiam seed all"]
+    
+    SEEDER --> GITHUB["🐙 GitHub<br/>fake 'accidentally public' repo<br/>config.json with creds"]
+    SEEDER --> S3["🪣 AWS S3<br/>public bucket<br/>company-prod-backups-xxx"]
+    SEEDER --> PASTE["📋 Pastebin<br/>simulated leak<br/>pastebin-sim.html"]
+    
+    GITHUB --> SCAN["🕵️ Attacker scans<br/>GitHub for leaked keys"]
+    S3 --> SCAN2["🕵️ Attacker scans<br/>public S3 buckets"]
+    PASTE --> SCAN3["🕵️ Attacker finds<br/>pastebin dumps"]
+    
+    SCAN & SCAN2 & SCAN3 --> USE["💥 Attacker uses<br/>the ghost keys"]
+    USE --> TRAP["🚨 GHOST TRIGGERED<br/>Alert fires in < 2s"]
+    
+    style KEYS fill:#f59e0b,stroke:#92400e,color:#fff
+    style SEEDER fill:#22c55e,stroke:#166534,color:#fff
+    style TRAP fill:#ef4444,stroke:#991b1b,color:#fff
+```
+
+### Full Platform Overview
+
+```mermaid
+flowchart TB
+    subgraph INPUT["🎮 Control Plane"]
+        CLI2["🔧 CLI<br/>deploy · simulate · seed<br/>mesh · status · clean<br/>journey · replay · dashboard"]
+        DASH3["📊 Web Dashboard<br/>HTMX + SSE + Chart.js<br/>SQLite backend"]
+    end
+    
+    subgraph GHOSTS["👻 Ghost Layer"]
+        AWS_G["AWS IAM<br/>decoy users + policies"]
+        GIT_G["GitHub<br/>machine users + repos"]
+        OKTA_G["Okta<br/>fake employee profiles"]
+        LOCAL_G["Local JSON<br/>ghosts.json"]
+    end
+    
+    subgraph DETECT["🎯 Detection Layer"]
+        CTRAIL["AWS CloudTrail"]
+        EVENTBR["Amazon EventBridge"]
+        LAMBDA2["AWS Lambda<br/>Go runtime"]
+        LOCAL_D["Local Alert Engine<br/>direct Slack + SSE"]
+    end
+    
+    subgraph OUTPUT["📢 Outputs"]
+        SLACK4["🟢 Slack<br/>Block Kit alerts"]
+        DASH4["📊 Dashboard<br/>live SSE feed"]
+        PDF["📄 PDF Reports"]
+        JSON_R["📋 JSON Export"]
+        MERMAID["🗺️ Mermaid<br/>attack graphs"]
+        MITRE["🎯 MITRE ATT&CK<br/>technique mapping"]
+    end
+    
+    CLI2 --> GHOSTS
+    DASH3 --> GHOSTS
+    GHOSTS --> DETECT
+    DETECT --> OUTPUT
+    
+    style INPUT fill:#1e293b,stroke:#475569,color:#e2e8f0
+    style GHOSTS fill:#312e81,stroke:#4338ca,color:#e0e7ff
+    style DETECT fill:#701a75,stroke:#a21caf,color:#fae8ff
+    style OUTPUT fill:#14532d,stroke:#16a34a,color:#dcfce7
+```
+
+
+---
+
 
 ## Web Dashboard
 
