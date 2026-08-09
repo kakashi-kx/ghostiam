@@ -38,11 +38,11 @@ Most detection rules chase behavior — anomalous logins, unusual API volume, im
 <table>
 <tr>
 <td width="50%">
-<img src="docs/screenshots/journey-timeline.png" alt="Attacker journey kill chain with MITRE mappings">
+<img src="docs/screenshots/Screenshot 2026-08-07 203121.png" alt="Attacker journey kill chain with MITRE mappings">
 <p align="center"><sub>Attacker journey — kill chain reconstructed with MITRE ATT&CK mapping</sub></p>
 </td>
 <td width="50%">
-<img src="docs/screenshots/journey-graph.png" alt="Mermaid attack graph">
+<img src="docs/screenshots/Screenshot 2026-08-07 203732.png" alt="Mermaid attack graph">
 <p align="center"><sub>Same journey, rendered as a Mermaid flow diagram</sub></p>
 </td>
 </tr>
@@ -136,7 +136,7 @@ make deploy-lambda                                   # Terraform: Lambda + Event
 
 Serve the operations console with `ghostiam dashboard --port 8080 --api-key <key>`. Every page is authenticated with a shared API key (cookie, `?api_key=`, or `X-API-Key` header) and updates live over Server-Sent Events — no polling, no refresh.
 
-<img src="docs/screenshots/alerts-feed.png" alt="Live alert feed with severity badges">
+<img src="docs/screenshots/Screenshot 2026-08-07 203035.png" alt="Live alert feed with severity badges">
 
 | Page | What it shows |
 |---|---|
